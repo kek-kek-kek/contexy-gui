@@ -598,9 +598,14 @@ function collectToolUsage() {
     try {
       const db = new DatabaseSync(VSCDB, { readOnly: true });
       ides.cursor = db.prepare('SELECT COUNT(*) n FROM composerHeaders').get().n || 0;
-      const rows = db.prepare("SELECT value FROM cursorDiskKV WHERE key LIKE 'composerData:%'").all();
-      for (const row of rows) {
+      // never .all() — composerData blobs can be hundreds of MB together and
+      // OOM the process (heap limit). iterate() keeps one row in memory.
+      const stmt = db.prepare("SELECT value FROM cursorDiskKV WHERE key LIKE 'composerData:%'");
+      const MAX_BLOB = 2 * 1024 * 1024;
+      for (const row of stmt.iterate()) {
         const raw = row.value;
+        const len = raw == null ? 0 : (typeof raw === 'string' ? raw.length : raw.length);
+        if (len > MAX_BLOB) continue;
         const s = typeof raw === 'string' ? raw : Buffer.from(raw || []).toString('utf8');
         let j;
         try { j = JSON.parse(s); } catch (err) { continue; }
