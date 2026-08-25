@@ -57,6 +57,7 @@
     align-items: center;
     gap: 8px;
     justify-self: end;
+    min-width: 0;
   }
 
   .ide-picker.open { z-index: 1002; }
@@ -660,10 +661,12 @@
 
   .confirm-btn.keep { background: rgba(15, 20, 35, 0.07); color: var(--ink); }
   .confirm-btn.keep:hover { background: rgba(15, 20, 35, 0.12); }
+  .confirm-btn.go { background: rgba(10, 12, 18, 0.88); color: #fff; }
+  .confirm-btn.go:hover { filter: brightness(1.08); }
   .confirm-btn.trash-it { background: var(--red); color: #fff; }
   .confirm-btn.trash-it:hover { filter: brightness(1.08); }
 
-  /* ---- Loading splash: Contexy logo only. Blocks use left/top/width/height
+  /* ---- First paint: logo + privacy nutrition label. Blocks use left/top/width/height
      (those interpolate) — grid-template-* snaps, so it was never animating. ---- */
   .splash {
     position: fixed;
@@ -673,19 +676,30 @@
     align-items: center;
     justify-content: center;
     background: var(--bg);
-    transition: opacity 0.5s ease, visibility 0.5s ease;
+    transition: opacity 0.4s ease, visibility 0.4s ease;
+    padding: 28px;
   }
 
   .splash.out { opacity: 0; visibility: hidden; pointer-events: none; }
 
-  .splash-logo {
-    display: flex;
-    align-items: center;
+  .splash-card {
+    width: min(440px, 100%);
     background: #fff;
     border: 1px solid rgba(15, 20, 35, 0.06);
     border-radius: 26px;
-    padding: 16px 30px 16px 16px;
+    padding: 22px 26px 24px;
     box-shadow: var(--frame-shadow);
+  }
+
+  .splash.compact .splash-facts,
+  .splash.compact .splash-promise,
+  .splash.compact .confirm-actions { display: none; }
+  .splash.compact .splash-card { width: auto; padding: 16px 22px; }
+  .splash.compact .splash-status { margin-top: 10px; }
+
+  .splash-logo {
+    display: flex;
+    align-items: center;
   }
 
   .splash-blocks {
@@ -735,18 +749,106 @@
     50%      { left: 61px; top: 0;    width: 57px;  height: 35px; background: #f97316; }
     75%      { left: 0;    top: 0;    width: 118px; height: 41px; background: #ffe602; }
   }
+
+  @media (prefers-reduced-motion: reduce) {
+    .splash-block { animation: none !important; }
+    .od-strip { transition: none !important; }
+    .block, .col, .row, .treemap { transition: none !important; }
+  }
+
+  .splash-promise {
+    margin-top: 18px;
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+  }
+
+  .splash-facts {
+    margin-top: 12px;
+    padding-left: 18px;
+    font-size: 14.5px;
+    line-height: 1.45;
+    color: var(--ink-soft);
+  }
+
+  .splash-facts li + li { margin-top: 7px; }
+
+  .splash-status {
+    margin-top: 16px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--label);
+    font-variant-numeric: tabular-nums;
+    min-height: 1.3em;
+  }
+
+  .privacy-chip, .scan-pill {
+    border: 1px solid rgba(15, 20, 35, 0.06);
+    background: #fff;
+    border-radius: 18px;
+    padding: 8px 14px;
+    box-shadow: var(--frame-shadow);
+    height: 48px;
+    display: flex;
+    align-items: center;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--ink);
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .privacy-chip:hover, .scan-pill:hover { color: var(--ink); background: #fff; }
+  .scan-pill {
+    cursor: default;
+    color: var(--ink-soft);
+    max-width: 12ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex-shrink: 1;
+  }
+  .scan-pill[hidden], .privacy-chip[hidden] { display: none; }
+
+  .canvas.skeleton {
+    background:
+      linear-gradient(90deg, rgba(15,20,35,0.04) 0%, rgba(15,20,35,0.09) 45%, rgba(15,20,35,0.04) 100%)
+      0 0 / 220% 100% no-repeat,
+      #fff;
+    animation: skel 1.4s ease infinite;
+  }
+  @keyframes skel {
+    0% { background-position: 100% 0; }
+    100% { background-position: -100% 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .canvas.skeleton { animation: none; }
+  }
 </style>
 </head>
 <body data-palette="#3b82f6,#f59e0b,#8b5cf6,#f97316,#e11d48,#14b8a6">
 
   <div class="splash" id="splash">
-    <div class="splash-logo">
-      <div class="splash-blocks">
-        <div class="splash-block sb-a"></div>
-        <div class="splash-block sb-b"></div>
-        <div class="splash-block sb-c"></div>
+    <div class="splash-card">
+      <div class="splash-logo">
+        <div class="splash-blocks">
+          <div class="splash-block sb-a"></div>
+          <div class="splash-block sb-b"></div>
+          <div class="splash-block sb-c"></div>
+        </div>
+        <span class="splash-word">Contexy</span>
       </div>
-      <span class="splash-word">Contexy</span>
+      <p class="splash-promise">Stays on this Mac. Nothing is uploaded.</p>
+      <ul class="splash-facts">
+        <li>Reads the rule and skill files already on this Mac, for size and a one-line summary.</li>
+        <li>Reads local Cursor and Claude chats, to see which of those files you actually used.</li>
+        <li>Listens on 127.0.0.1 only. Public model prices are the only network call, and your files are not in it.</li>
+      </ul>
+      <div class="splash-status" id="splashStatus" aria-live="polite">Looking for rule files on this Mac…</div>
+      <div class="confirm-actions" style="margin-top: 18px">
+        <button type="button" class="confirm-btn go" id="splashGo">Continue</button>
+      </div>
     </div>
   </div>
 
@@ -792,6 +894,8 @@
     </header>
 
     <div class="top-right">
+      <div class="scan-pill" id="scanPill" hidden></div>
+      <button type="button" class="privacy-chip" id="privacyChip" title="Stays on this Mac. Nothing is uploaded.">On this Mac</button>
       <div class="kind-switch" id="kindSwitch" role="tablist" aria-label="File kind">
         <button type="button" role="tab" data-kind="rule" aria-selected="true">Rules</button>
         <button type="button" role="tab" data-kind="skill" aria-selected="false">Skills</button>
@@ -800,7 +904,12 @@
   </div>
 
   <main class="stage">
-  <div class="canvas" data-kind="rule">
+  <div class="canvas skeleton" data-kind="rule">
+    <div class="empty-note" id="boardPlaceholder">Looking for rule files on this Mac…</div>
+  </div>
+  <div class="canvas" data-kind="skill" hidden></div>
+  </main>
+  <template id="demoBoard">
     <div class="col" style="flex: 40">
       <div class="block big" data-tokens="2.4" style="flex: 54; background: #3b82f6">
         <button type="button" class="block-trash" aria-label="Remove" title="Remove">×</button>
@@ -813,7 +922,6 @@
         <div class="tokens">2.0k tokens · used 32m ago</div>
       </div>
     </div>
-
     <div class="col" style="flex: 26">
       <div class="block big" data-tokens="1.6" style="flex: 56; background: #8b5cf6">
         <button type="button" class="block-trash" aria-label="Remove" title="Remove">×</button>
@@ -826,7 +934,6 @@
         <div class="tokens">1.3k tokens · used 3h ago</div>
       </div>
     </div>
-
     <div class="col" style="flex: 34">
       <div class="row" style="flex: 26">
         <div class="block med" data-tokens="0.51" style="flex: 53; background: #e11d48">
@@ -840,12 +947,9 @@
           <div class="tokens">0.5k · 12m ago</div>
         </div>
       </div>
-
       <div class="treemap" style="flex: 74"></div>
     </div>
-  </div>
-  <div class="canvas" data-kind="skill" hidden></div>
-  </main>
+  </template>
 
   <script>
     // click.wav on every in-app button (pickers, tabs, ×, confirm, menu rows)
@@ -1154,6 +1258,7 @@
     // price; speed = the model's output tok/s tier estimate. Assumptions are
     // disclosed in the hover titles.
     let contextTokens = 0;         // raw tokens currently on the board
+    let liveStats = false;         // false until real files (or the demo fallback) land
     // window size of the SELECTED model — Grok 500k, Haiku 200k, Opus 1M, etc.
     const ctxStr = (c) => {
       if (c >= 950000) {
@@ -1174,6 +1279,12 @@
       return m.tps * 2 * ctx / (ctx + Math.max(0, tokens));
     }
     function updateStats() {
+      if (!liveStats) {
+        costOdo.set('...');
+        speedOdo.set('...');
+        ctxOdo.set('...');
+        return;
+      }
       const m = currentModel;
       const dollars = (contextTokens / 1e6) * m.inPrice;
       costOdo.set(dollarsStr(dollars) + '/prompt');
@@ -1198,13 +1309,8 @@
       }
     }
 
-    // demo board: sum the static blocks + the treemap state
-    for (const b of canvasEl().querySelectorAll('.block[data-tokens]:not(.cell)')) {
-      contextTokens += parseFloat(b.dataset.tokens) * 1000;
-    }
-    contextTokens += rulesState.reduce((a, r) => a + r.v, 0) * 1000;
+    // live numbers wait for /api/rules — don't flash the demo totals first
     updateStats();
-    applyDemoVerdicts();
 
     // ---- Per-tile × button opens the confirm card ----
     document.addEventListener('click', (e) => {
@@ -1494,6 +1600,7 @@
       const ringHorizon = sinceStr ? ` since ${sinceStr}` : '';
       if (!list.length) {
         const canvas = canvasEl();
+        canvas.classList.remove('skeleton');
         canvas.innerHTML = '';
         const note = document.createElement('div');
         note.className = 'empty-note';
@@ -1582,6 +1689,7 @@
         }
       }
 
+      canvas.classList.remove('skeleton');
       canvas.innerHTML = '';
       let ci = 0;
       const mkBlock = (it, cls) => {
@@ -1679,6 +1787,7 @@
 
     function syncStatsFromIde() {
       if (lastData) {
+        liveStats = true;
         contextTokens = ideFilter(lastData.rules)
           .filter((r) => !trashedPaths.has(r.path))
           .reduce((a, r) => a + (r.tokens || 0), 0);
@@ -1686,7 +1795,9 @@
       updateStats();
     }
 
-    const demoHTML = boards.rule.el.innerHTML; // file:// fallback restored when toggling back to Rules
+    function demoHTML() {
+      return document.getElementById('demoBoard').content.cloneNode(true);
+    }
 
     function boardKey(kind) {
       const live = lastData
@@ -1700,7 +1811,10 @@
     function restoreDemo() {
       activateKind('rule');
       cellEls.clear();
-      canvasEl().innerHTML = demoHTML;
+      const canvas = canvasEl();
+      canvas.classList.remove('skeleton');
+      canvas.innerHTML = '';
+      canvas.appendChild(demoHTML());
       rulesState = RULES.map(([name, v, ago], i) => {
         const usedAt = Date.now() - (agoToMs(ago) || 0);
         return { name, v, ago, usedAt, ...staleness(usedAt, null, 'rule', ''), color: CELL_COLORS[i % CELL_COLORS.length] };
@@ -1713,6 +1827,7 @@
         contextTokens += parseFloat(b.dataset.tokens) * 1000;
       }
       contextTokens += rulesState.reduce((a, r) => a + r.v, 0) * 1000;
+      liveStats = true;
       updateStats();
       applyDemoVerdicts();
       reflow();
@@ -1739,7 +1854,9 @@
           watchTreemap();
           return;
         }
-        canvasEl().innerHTML = '';
+        const skillCanvas = canvasEl();
+        skillCanvas.classList.remove('skeleton');
+        skillCanvas.innerHTML = '';
         const note = document.createElement('div');
         note.className = 'empty-note';
         note.textContent = 'No skills in the demo board';
@@ -1916,11 +2033,10 @@
       if (wanted) selectModel(wanted);
     }
 
-    // Logo stays up 2.6s even when the scan is already done — a beat, not a
-    // wait. The board still loads behind it so the fade lands on live tiles.
-    // Screenshot rigs skip it; #splash pins it.
+    // First paint is the privacy card. It drops as soon as real files (or the
+    // demo fallback) are on the board — no minimum beat. Returning visitors
+    // skip the copy after one Continue. Screenshot rigs skip it; #splash pins it.
     let splashStarted = performance.now();
-    const SPLASH_MIN_MS = 2600;
     const tBoot = splashStarted;
     const boot = { panel: 0, api: 0, board: 0 };
     function bootLog(event) {
@@ -1932,21 +2048,71 @@
     const skipSplash = location.hash && location.hash !== '#splash'
       && /^(#menu|#modelmenu|#tip=|#confirm=|#ide=|#model=|#kind=|#ad)/.test(location.hash);
     const splashEl = document.getElementById('splash');
-    if (skipSplash && splashEl) splashEl.remove();
+    const splashStatus = document.getElementById('splashStatus');
+    const scanPill = document.getElementById('scanPill');
+    const privacyChip = document.getElementById('privacyChip');
+    const splashGo = document.getElementById('splashGo');
+    let seenPrivacy = false;
+    try { seenPrivacy = localStorage.getItem('contexy-seen-privacy') === '1'; } catch (err) { /* private mode */ }
+    let privacyPinned = false;
+    // Returning visit: skip the card. Skeleton + scan pill carry the wait.
+    if (seenPrivacy && splashEl && location.hash !== '#splash') splashEl.remove();
+
+    function setScanCopy(data) {
+      const p = (data && data.progress) || {};
+      const n = (data && data.count) || p.files || 0;
+      const root = p.root || '';
+      const walking = !!(data && data.scanning) || p.state === 'walking';
+      const line = walking
+        ? (root ? `Reading ${root} · ${n} files so far` : `Looking on this Mac · ${n} files so far`)
+        : (n ? `${n} files on this Mac` : 'Looking for rule files on this Mac…');
+      if (splashStatus) splashStatus.textContent = line;
+      if (scanPill) {
+        scanPill.hidden = !walking;
+        scanPill.textContent = walking ? `${n} files` : '';
+        scanPill.title = line;
+      }
+      const note = document.getElementById('boardPlaceholder');
+      if (note) note.textContent = line;
+    }
+
     function hideSplash() {
       if (location.hash === '#splash') return;
+      if (!seenPrivacy) return; // first visit: they click Continue
+      if (privacyPinned) return;
       const s = document.getElementById('splash');
       if (!s || s.classList.contains('out')) return;
-      const wait = Math.max(0, SPLASH_MIN_MS - (performance.now() - splashStarted));
-      setTimeout(() => {
-        const el = document.getElementById('splash');
-        if (!el || el.classList.contains('out')) return;
-        el.classList.add('out');
-        bootLog('panel');
-        setTimeout(() => el.remove(), 500);
-      }, wait);
+      s.classList.add('out');
+      bootLog('panel');
+      setTimeout(() => { if (s.classList.contains('out')) s.remove(); }, 420);
     }
-    if (skipSplash) bootLog('panel');
+    if (skipSplash && splashEl) { splashEl.remove(); bootLog('panel'); }
+
+    function markPrivacySeen() {
+      seenPrivacy = true;
+      try { localStorage.setItem('contexy-seen-privacy', '1'); } catch (err) { /* private mode */ }
+    }
+    if (splashGo) splashGo.addEventListener('click', () => {
+      privacyPinned = false;
+      markPrivacySeen();
+      hideSplash();
+    });
+    if (privacyChip) {
+      privacyChip.addEventListener('click', () => {
+        const s = document.getElementById('splash') || splashEl;
+        if (!s) return;
+        privacyPinned = true;
+        s.classList.remove('out', 'compact');
+        if (!document.body.contains(s)) document.body.appendChild(s);
+        if (splashStatus) splashStatus.textContent = 'Stays on this Mac. Nothing is uploaded.';
+      });
+    }
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && privacyPinned) {
+        privacyPinned = false;
+        hideSplash();
+      }
+    });
 
     let lastPayload = null;
     async function refresh(fresh) {
@@ -1954,27 +2120,30 @@
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const text = await res.text();
       const data = JSON.parse(text);
-      if (data.rules && data.rules.length && text !== lastPayload) {
+      setScanCopy(data);
+      if (Array.isArray(data.rules) && text !== lastPayload) {
         lastPayload = text;
         lastData = data;
         renderBoard();
         if (!boot.board) bootLog('board');
+        hideSplash();
       }
       return data;
     }
     (async () => {
       try {
         const tApi = performance.now();
-        let data = await refresh(); // cache-first — board loads behind the logo
+        let data = await refresh();
         boot.api = Math.round(performance.now() - tApi);
         bootLog('api');
         hideSplash();
-        for (let i = 0; i < 40 && !(data.usageReady && (data.vscdb === 'ready' || data.vscdb === 'unavailable')); i++) {
-          await new Promise((r) => setTimeout(r, 400));
+        for (let i = 0; i < 80 && (data.scanning || !(data.usageReady && (data.vscdb === 'ready' || data.vscdb === 'unavailable'))); i++) {
+          await new Promise((r) => setTimeout(r, 280));
           data = await refresh();
         }
       } catch (err) {
         console.warn('live rules unavailable — showing demo data:', err.message);
+        restoreDemo();
         hideSplash();
       }
     })();

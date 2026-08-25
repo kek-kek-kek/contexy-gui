@@ -174,7 +174,17 @@ function collectFile(p, found) {
   });
 }
 
-function walk(dir, depth, found) {
+// Yield about every frame so GET / stays responsive, without turning a
+// Documents walk into a 2-minute setImmediate storm.
+let walkYieldAt = 0;
+function maybeYield() {
+  const now = Date.now();
+  if (now - walkYieldAt < 16) return null;
+  walkYieldAt = now;
+  return new Promise((r) => setImmediate(r));
+}
+
+async function walkAsync(dir, depth, found, onFile) {
   if (depth > MAX_DEPTH) return;
   let entries;
   try {
@@ -191,11 +201,17 @@ function walk(dir, depth, found) {
       if (SKIP_DIRS.has(e.name)) continue;
       if (e.name.startsWith('.') && !HIDDEN_ALLOW.has(e.name)) continue;
       if (inCursor && !CURSOR_SUBDIRS.has(e.name)) continue;
-      if (inClaude) continue; // ~/.claude subdirs are transcripts, not rules
-      walk(p, depth + 1, found);
+      if (inClaude) continue;
+      await walkAsync(p, depth + 1, found, onFile);
     } else if (e.isFile()) {
-      if (/\.(md|mdc)$/.test(e.name) || e.name === '.cursorrules') collectFile(p, found);
+      if (/\.(md|mdc)$/.test(e.name) || e.name === '.cursorrules') {
+        collectFile(p, found);
+        scanProgress.files = found.size;
+        if (onFile) onFile();
+      }
     }
+    const y = maybeYield();
+    if (y) await y;
   }
 }
 
@@ -591,7 +607,7 @@ const IDE_KEYS = [
   { name: 'Zed', key: 'zed' },
 ];
 
-function collectToolUsage() {
+async function collectToolUsage() {
   const models = {};
   const ides = { cursor: 0, claude: 0, windsurf: 0, copilot: 0, zed: 0 };
   if (DatabaseSync && fs.existsSync(VSCDB)) {
@@ -602,6 +618,7 @@ function collectToolUsage() {
       // OOM the process (heap limit). iterate() keeps one row in memory.
       const stmt = db.prepare("SELECT value FROM cursorDiskKV WHERE key LIKE 'composerData:%'");
       const MAX_BLOB = 2 * 1024 * 1024;
+      let n = 0;
       for (const row of stmt.iterate()) {
         const raw = row.value;
         const len = raw == null ? 0 : (typeof raw === 'string' ? raw.length : raw.length);
@@ -619,7 +636,11 @@ function collectToolUsage() {
           for (const v of Object.values(o)) walk(v, depth + 1);
         };
         walk(j, 0);
-        for (const n of names) models[n] = (models[n] || 0) + 1;
+        for (const name of names) models[name] = (models[name] || 0) + 1;
+        if (++n % 40 === 0) {
+          const y = maybeYield();
+          if (y) await y;
+        }
       }
       db.close();
     } catch (err) {
@@ -705,8 +726,13 @@ function loadToolUsage() {
 let toolUsageRefreshing = null;
 function refreshToolUsage() {
   if (toolUsageRefreshing) return toolUsageRefreshing;
-  toolUsageRefreshing = Promise.resolve().then(() => {
-    const data = collectToolUsage();
+  loadToolUsage();
+  if (toolUsageMem && Date.now() - (toolUsageMem.t || 0) < 6 * 3600 * 1000
+      && Object.keys(toolUsageMem.data.models || {}).length) {
+    return Promise.resolve();
+  }
+  toolUsageRefreshing = Promise.resolve().then(async () => {
+    const data = await collectToolUsage();
     toolUsageMem = { t: Date.now(), data };
     try { fs.writeFileSync(TOOL_USAGE_CACHE, JSON.stringify({ t: toolUsageMem.t, ...data })); }
     catch (err) { console.error(`[usage] tool-usage cache save failed: ${err.message}`); }
@@ -822,13 +848,21 @@ function scheduleOverlay(rules, roots, gen) {
   return overlaying;
 }
 
+function displayRoot(p) {
+  if (p === HOME) return '~';
+  if (p.startsWith(HOME + path.sep)) return '~' + p.slice(HOME.length);
+  return p;
+}
+
+// Global dot-dirs first: ~/.cursor rules paint in a few hundred ms. Documents
+// can take seconds and used to block first paint.
 function scanRoots() {
   return [
-    ...WALK_ROOTS,
     path.join(HOME, '.cursor'),
     path.join(HOME, '.claude'),
     path.join(HOME, '.cosmos', 'rules'),
     path.join(HOME, '.codeium', 'windsurf'),
+    ...WALK_ROOTS,
   ].filter((p) => {
     try { return fs.statSync(p).isDirectory(); }
     catch (err) {
@@ -838,10 +872,46 @@ function scanRoots() {
   });
 }
 
-function collectRules() {
+const PRIVACY = {
+  localOnly: true,
+  bind: '127.0.0.1',
+  network: 'OpenRouter public model prices only. No files, no account.',
+  reads: [
+    'Agent rule and skill files already on this Mac (full text, for size and a one-line summary)',
+    'Local Cursor and Claude chat stores (to see which files you actually used)',
+  ],
+  never: [
+    'No account, no signup',
+    'No upload of rules, skills, or chats',
+    'Trash only after you confirm, and only for a file this scan found',
+  ],
+};
+
+let scanProgress = { state: 'starting', files: 0, root: '', roots: [] };
+
+async function collectRules(onPartial) {
   const found = new Map();
   const roots = scanRoots();
-  for (const r of roots) walk(r, 0, found);
+  scanProgress = { state: 'walking', files: 0, root: '', roots: roots.map(displayRoot) };
+  let lastPub = 0;
+  let firstPub = true;
+  const publish = () => {
+    if (!onPartial || !found.size) return;
+    const now = Date.now();
+    if (!firstPub && now - lastPub < 350) return;
+    firstPub = false;
+    lastPub = now;
+    onPartial([...found.values()].sort((a, b) => b.tokens - a.tokens), roots);
+  };
+  for (const r of roots) {
+    scanProgress.root = displayRoot(r);
+    await walkAsync(r, 0, found, publish);
+    scanProgress.files = found.size;
+    lastPub = 0;
+    if (onPartial && found.size) {
+      onPartial([...found.values()].sort((a, b) => b.tokens - a.tokens), roots);
+    }
+  }
   return { roots, rules: [...found.values()].sort((a, b) => b.tokens - a.tokens) };
 }
 
@@ -890,6 +960,12 @@ function historyFloor() {
 }
 
 function packScan(rules, roots, extra) {
+  // fingerprints stay in memory for the usage overlay — they bloat the payload
+  const slim = rules.map((r) => {
+    if (!r.fp) return r;
+    const { fp, ...rest } = r;
+    return rest;
+  });
   return JSON.stringify({
     generatedAt: Date.now(),
     scanMs: extra.scanMs || 0,
@@ -898,8 +974,11 @@ function packScan(rules, roots, extra) {
     vscdb: vscdbState,
     historySince: extra.historySince || null,
     usageReady: !!extra.usageReady,
-    count: rules.length,
-    rules,
+    scanning: extra.scanning === true,
+    progress: { ...scanProgress },
+    privacy: PRIVACY,
+    count: slim.length,
+    rules: slim,
   });
 }
 
@@ -934,6 +1013,20 @@ function loadScanCache() {
   }
 }
 
+function waitForCachedBody(ms = 120000) {
+  if (cache.body) return Promise.resolve(cache.body);
+  const t0 = Date.now();
+  return new Promise((resolve, reject) => {
+    const tick = () => {
+      if (cache.body) return resolve(cache.body);
+      if (!scanning) return reject(new Error('scan failed'));
+      if (Date.now() - t0 > ms) return reject(new Error('scan timeout'));
+      setTimeout(tick, 40);
+    };
+    tick();
+  });
+}
+
 async function scan(opts = {}) {
   // a page reload passes ?fresh=1 so a newly-added rule (yes-sir.mdc) shows up
   // immediately instead of waiting out the 60s cache
@@ -943,9 +1036,6 @@ async function scan(opts = {}) {
     try {
       const t0 = Date.now();
       const gen = ++scanGen;
-      const { roots, rules } = collectRules();
-      scannedPaths = new Set(rules.map((r) => r.path)); // the /api/trash allowlist
-      applyKnownUsage(rules);
       let prevReady = false;
       let prevSince = null;
       if (cache.body) {
@@ -957,10 +1047,38 @@ async function scan(opts = {}) {
           console.error(`[scan] prev cache parse failed: ${err.message}`);
         }
       }
-      cache = {
-        t: Date.now(),
-        body: packScan(rules, roots, { scanMs: Date.now() - t0, historySince: prevSince, usageReady: prevReady }),
+      const publish = (rules, roots, stillWalking) => {
+        if (stillWalking) {
+          for (const r of rules) {
+            if (r.editedAt == null) {
+              r.editedAt = r.lastUsed;
+              r.verb = r.verb || 'edited';
+            }
+          }
+        } else {
+          applyKnownUsage(rules);
+        }
+        scannedPaths = new Set(rules.map((r) => r.path));
+        cache = {
+          t: Date.now(),
+          body: packScan(rules, roots, {
+            scanMs: Date.now() - t0,
+            historySince: prevSince,
+            usageReady: prevReady,
+            scanning: stillWalking,
+          }),
+        };
       };
+      const { roots, rules } = await collectRules((partial, r) => {
+        if (gen !== scanGen) return;
+        publish(partial, r, true);
+        console.log(`[scan] partial ${partial.length} files (${scanProgress.root})`);
+      });
+      if (gen !== scanGen) return cache.body;
+      scanProgress.state = 'done';
+      scanProgress.root = '';
+      scanProgress.files = rules.length;
+      publish(rules, roots, false);
       writeScanCache(cache.body);
       console.log(`[scan] ${rules.length} context files in ${Date.now() - t0}ms (usage in background)`);
       scheduleOverlay(rules, roots, gen);
@@ -992,19 +1110,31 @@ function handleRequest(req, res) {
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
         res.end(body);
       };
-      // paint from cache immediately; a walk still runs in the background when
-      // the client asked for a fresh disk scan
+      // paint from cache (or the first partial) immediately; a walk still runs
+      // in the background when the client asked for a fresh disk scan
       if (cache.body) {
         send(cache.body);
         if (fresh || Date.now() - cache.t >= 60000) scan({ fresh: true }).catch((err) => console.error(err.stack));
         return;
       }
-      scan({ fresh })
+      if (!scanning) scan({ fresh: true }).catch((err) => console.error(err.stack));
+      waitForCachedBody()
         .then(send)
         .catch((err) => {
           console.error(err.stack);
           res.writeHead(500).end('scan failed');
         });
+      return;
+    }
+    if (url.pathname === '/api/status') {
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+      res.end(JSON.stringify({
+        ...scanProgress,
+        scanning: !!scanning || scanProgress.state === 'walking',
+        privacy: PRIVACY,
+        cached: !!cache.body,
+        vscdb: vscdbState,
+      }));
       return;
     }
     if (url.pathname === '/api/models') {
@@ -1062,15 +1192,18 @@ function handleRequest(req, res) {
 }
 
 function kickoffIndexer() {
-  refreshToolUsage();
+  // Scan (or cache) first. Chat-history tally and the 4GB vscdb walk used to
+  // start in parallel and pin the event loop, so the window never painted.
   const start = cache.body ? Promise.resolve(cache.body) : scan();
   start
-    .then((body) => {
+    .then(async (body) => {
+      await new Promise((r) => setTimeout(r, 400));
       const data = JSON.parse(body);
-      // overlay is incremental (per-file mtime cache) — always refresh so new
-      // sessions show up without blocking first paint
       scheduleOverlay(data.rules || [], data.roots || scanRoots());
-      return indexVscdb(data.rules || []);
+      setTimeout(() => {
+        indexVscdb(data.rules || []).catch((err) => console.error(err.stack));
+        refreshToolUsage();
+      }, 1200);
     })
     .catch((err) => console.error(err.stack));
 }
@@ -1079,6 +1212,9 @@ function startServer(port = PORT) {
   loadVscdbCache();
   loadOverlayCache();
   loadScanCache();
+  // Walk while Electron is still creating the window, so the first /api/rules
+  // can paint from a partial instead of blocking on Documents.
+  setImmediate(() => kickoffIndexer());
   const server = http.createServer(handleRequest);
   return new Promise((resolve, reject) => {
     const onError = (err) => {
@@ -1091,7 +1227,6 @@ function startServer(port = PORT) {
       const addr = server.address();
       console.log(`contexty → http://127.0.0.1:${addr.port}/  (scanning: ${WALK_ROOTS.join(', ')} + global dot-dirs)`);
       resolve({ server, port: addr.port });
-      setImmediate(() => kickoffIndexer());
     });
   });
 }

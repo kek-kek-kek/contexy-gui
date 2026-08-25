@@ -1,5 +1,7 @@
 #!/usr/bin/env node
-// Contexy desktop shell — splash from disk immediately, then the live server.
+// Contexy desktop shell — one paint of the live local server.
+// Electron ready-to-show + matching backgroundColor: no white flash, no
+// loadFile-then-loadURL double navigation (that showed fake tiles, then jumped).
 const tProc = Date.now();
 function boot(msg) { console.log(`[boot] ${msg}  +${Date.now() - tProc}ms`); }
 boot('process');
@@ -23,6 +25,10 @@ async function listen() {
 }
 
 async function openWindow() {
+  if (!started) started = listen();
+  const { port } = await started;
+  boot('server-listening :' + port);
+
   win = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -32,7 +38,7 @@ async function openWindow() {
     icon: path.join(__dirname, 'build', 'icon.png'),
     backgroundColor: '#eceef2',
     autoHideMenuBar: true,
-    show: true,
+    show: false,
     webPreferences: {
       sandbox: true,
       contextIsolation: true,
@@ -44,14 +50,11 @@ async function openWindow() {
     shell.openExternal(url);
     return { action: 'deny' };
   });
-  // Paint the logo from disk first so macOS isn't staring at a blank window
-  // (that's the rainbow wait cursor) while the local server comes up.
-  const splashFile = path.join(__dirname, 'index.html');
-  await win.loadFile(splashFile, { hash: 'splash' });
-  boot('splash-from-disk');
-  if (!started) started = listen();
-  const { port } = await started;
-  boot('server-listening :' + port);
+
+  const reveal = () => { if (win && !win.isDestroyed() && !win.isVisible()) win.show(); };
+  win.once('ready-to-show', reveal);
+  setTimeout(reveal, 1500);
+
   await win.loadURL(`http://127.0.0.1:${port}/`);
   boot('live-url');
 }
