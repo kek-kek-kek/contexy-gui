@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Contexy logo</title>
+<style>
+  body {
+    margin: 0;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #eceef2;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Inter, system-ui, sans-serif;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    background: #fff;
+    border: 1px solid rgba(15, 20, 35, 0.06);
+    border-radius: 20px;
+    padding: 9px 20px 9px 9px;
+    box-shadow: 0 10px 24px rgba(15, 20, 35, 0.16), 0 2px 6px rgba(15, 20, 35, 0.08);
+  }
+
+  .logo-blocks {
+    display: grid;
+    grid-template-columns: 46px 25px;
+    grid-template-rows: 28px 29px;
+    gap: 5px 6px;
+  }
+
+  .logo-block {
+    border-radius: 9px;
+    box-shadow: 0 5px 12px rgba(15, 20, 35, 0.18), 0 1px 3px rgba(15, 20, 35, 0.08);
+  }
+
+  .lb-red { grid-column: 1 / -1; background: #f80404; }
+  .lb-blue { background: #3d6ef2; }
+  .lb-yellow { background: #ffe602; }
+
+  .logo-word {
+    margin-left: 13px;
+    font-size: 30px;
+    font-weight: 700;
+    color: #828282;
+    letter-spacing: -0.01em;
+  }
+</style>
+</head>
+<body>
+  <div class="logo" id="logo">
+    <div class="logo-blocks">
+      <div class="logo-block lb-red"></div>
+      <div class="logo-block lb-blue"></div>
+      <div class="logo-block lb-yellow"></div>
+    </div>
+    <span class="logo-word">Contexy</span>
+  </div>
+</body>
+</html>

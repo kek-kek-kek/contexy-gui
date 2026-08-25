@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Contexy — ad</title>
+<style>
+  :root {
+    --bg: #eceef2;
+    --ink: rgba(10, 12, 18, 0.88);
+    --label: #9aa1ad;
+    --green: #2aa838;
+    --red: #e0302e;
+    --frame: 0 10px 24px rgba(15, 20, 35, 0.16), 0 2px 6px rgba(15, 20, 35, 0.08);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; background: #1e1e1e; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Inter, system-ui, sans-serif; }
+
+  .world { position: fixed; inset: 0; }
+  .stage {
+    position: absolute; inset: 0;
+    transform-origin: center center;
+    will-change: transform, filter;
+    overflow: hidden;
+  }
+  .scene { position: absolute; inset: 0; opacity: 0; pointer-events: none; }
+  .scene.on { opacity: 1; }
+
+  /* ---- fake Cursor ---- */
+  .ide { display: flex; background: #1e1e1e; color: #ccc; height: 100%; }
+  .ide-bar {
+    width: 48px; background: #181818; display: flex; flex-direction: column;
+    align-items: center; padding: 10px 0; gap: 14px; border-right: 1px solid #2a2a2a;
+  }
+  .ide-bar img { width: 26px; height: 26px; border-radius: 5px; }
+  .ide-ico { width: 22px; height: 22px; opacity: 0.55; font-size: 16px; text-align: center; }
+  .ide-ico.on { opacity: 1; }
+  .ide-side {
+    width: 220px; background: #181818; border-right: 1px solid #2a2a2a;
+    padding: 14px 12px; font-size: 12.5px; color: #9d9d9d;
+  }
+  .ide-side h4 { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 12px; color: #777; }
+  .ide-file { padding: 5px 8px; border-radius: 4px; }
+  .ide-file.on { background: #37373d; color: #fff; }
+  .ide-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .ide-tabs { height: 36px; background: #252526; display: flex; align-items: center; padding: 0 12px; font-size: 12px; color: #bbb; border-bottom: 1px solid #2a2a2a; }
+  .ide-code { flex: 1; padding: 18px 22px; font-family: "SF Mono", ui-monospace, Menlo, monospace; font-size: 13px; line-height: 1.7; color: #d4d4d4; }
+  .kw { color: #c586c0; } .str { color: #ce9178; } .cm { color: #6a9955; }
+  .ide-chat {
+    width: 42%; max-width: 520px; background: #1f1f1f; border-left: 1px solid #2a2a2a;
+    display: flex; flex-direction: column;
+  }
+  .chat-head { padding: 16px 18px; font-size: 15px; font-weight: 700; color: #eee; border-bottom: 1px solid #2a2a2a; }
+  .chat-log {
+    flex: 1; overflow: hidden; padding: 16px 16px 8px;
+    /* block flow, not flex — flex-end was stacking bubbles on top of each other */
+  }
+  .bubble {
+    display: table; /* shrink-wrap without collapsing height */
+    max-width: 88%;
+    margin: 0 0 10px 0;
+    padding: 11px 14px; border-radius: 12px; font-size: 15px; line-height: 1.45;
+  }
+  .bubble.user { margin-left: auto; background: #0e639c; color: #fff; }
+  .bubble.bot { margin-right: auto; background: #2d2d2d; color: #ddd; }
+  .chat-input {
+    margin: 10px 14px 16px; background: #2a2a2a; border: 1px solid #3a3a3a;
+    border-radius: 12px; padding: 12px 14px; min-height: 48px; color: #eee; font-size: 15px;
+    display: flex; align-items: center;
+  }
+  .caret { display: inline-block; width: 8px; height: 18px; background: #fff; margin-left: 1px; animation: blink 0.9s step-end infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* CONTEXT FULL — full-stage stamp, not a chat chip */
+  .stamp {
+    position: absolute; inset: 0; z-index: 80;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(10, 4, 4, 0.55); opacity: 0; pointer-events: none;
+    transition: opacity 0.25s ease;
+  }
+  .stamp.on { opacity: 1; }
+  .stamp-card {
+    background: #3a1010; color: #ff6b6b;
+    font-weight: 800; letter-spacing: 0.14em; font-size: 64px;
+    padding: 28px 56px; border: 2px solid #e0302e; border-radius: 18px;
+    box-shadow: 0 0 80px rgba(224,48,46,0.55);
+    transform: scale(0.86);
+    transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .stamp.on .stamp-card { transform: scale(1); }
+
+  /* ---- contexty miniature ---- */
+  .cx { background: var(--bg); height: 100%; display: flex; flex-direction: column; padding: 22px 26px; gap: 18px; color: var(--ink); }
+  .cx-top { display: flex; align-items: center; gap: 10px; }
+  .cx-pill {
+    background: #fff; border-radius: 14px; padding: 8px 12px; box-shadow: var(--frame);
+    display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px; white-space: nowrap;
+  }
+  .cx-pill img { width: 22px; height: 22px; border-radius: 5px; }
+  .cx-stats {
+    flex: 1; background: #fff; border-radius: 16px; padding: 8px 16px; box-shadow: var(--frame);
+    display: flex; justify-content: space-between; align-items: stretch; gap: 18px;
+  }
+  .cx-stat { display: flex; flex-direction: column; gap: 2px; }
+  .cx-stat .l { font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--label); }
+  .cx-stat .v { font-size: 22px; font-weight: 800; white-space: nowrap; }
+  .cx-stat.cost .v { color: var(--green); }
+  .cx-stat.speed .v { color: var(--red); }
+  .cx-stat.ctx .v { color: #2563eb; }
+  .cx-stat.bad.cost .v, .cx-stat.bad.speed .v, .cx-stat.bad.ctx .v { color: var(--red); }
+  .cx-board {
+    flex: 1; background: #fff; border-radius: 18px; padding: 12px; box-shadow: var(--frame);
+    display: grid; gap: 8px; min-height: 0;
+    grid-template-columns: repeat(8, 1fr);
+    grid-template-rows: repeat(5, 1fr);
+  }
+  .cx-board.clean {
+    grid-template-columns: 1.6fr 1.2fr 1fr 0.85fr;
+    grid-template-rows: 1.35fr 1fr;
+  }
+  .cx-board.clean .tile:nth-child(1) { grid-row: 1 / 2; grid-column: 1 / 2; }
+  .cx-board.clean .tile:nth-child(2) { grid-row: 2 / 3; grid-column: 1 / 2; }
+  .tile {
+    border-radius: 12px; box-shadow: 0 6px 14px rgba(15,20,35,0.18);
+    min-width: 0; min-height: 0; overflow: hidden;
+    padding: 10px 12px; color: var(--ink);
+  }
+  .tile .tn, .tile .tt { display: none; } /* tiny messy cells — labels only on the clean board */
+  .cx-board.clean .tile .tn {
+    display: block; font-family: "SF Mono", ui-monospace, Menlo, monospace;
+    font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .cx-board.clean .tile .tt { display: block; font-size: 12px; color: var(--ink); opacity: 0.6; margin-top: 4px; }
+  .tile.gone { opacity: 0; transform: scale(0.2); pointer-events: none; }
+  .cx-board.clean .tile.gone { display: none; }
+  .cx-trash {
+    width: 44px; height: 44px; background: #fff; border-radius: 14px; box-shadow: var(--frame);
+    display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0;
+  }
+  .cx-trash.hot { transform: scale(1.14); }
+
+  /* pointer */
+  .ptr {
+    position: absolute; left: 0; top: 0; width: 28px; height: 28px; z-index: 60;
+    pointer-events: none;
+    filter: drop-shadow(0 3px 4px rgba(0,0,0,0.45));
+    transform: translate(-2px, -2px);
+  }
+  .ptr.hide { opacity: 0; }
+  .click-rip {
+    position: absolute; width: 10px; height: 10px; border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.85); pointer-events: none; z-index: 49;
+    animation: rip 0.45s ease-out forwards;
+  }
+  @keyframes rip { to { transform: scale(4); opacity: 0; } }
+
+  .end {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: var(--bg); opacity: 0;
+  }
+  .end.on { opacity: 1; }
+  .logo { display: flex; align-items: center; background: #fff; border-radius: 22px; padding: 14px 26px 14px 14px; box-shadow: var(--frame); }
+  .logo-blocks { display: grid; grid-template-columns: 46px 25px; grid-template-rows: 28px 29px; gap: 5px 6px; }
+  .logo-block { border-radius: 9px; box-shadow: 0 5px 12px rgba(15,20,35,0.18); }
+  .lb-red { grid-column: 1 / -1; background: #f80404; }
+  .lb-blue { background: #3d6ef2; }
+  .lb-yellow { background: #ffe602; }
+  .logo-word { margin-left: 13px; font-size: 30px; font-weight: 700; color: #828282; }
+</style>
+</head>
+<body>
+<div class="world">
+  <div class="stage" id="stage">
+    <div class="scene on" id="ideScene">
+      <div class="ide">
+        <div class="ide-bar">
+          <img src="cursor-logo.png" alt="">
+          <div class="ide-ico on">📁</div>
+          <div class="ide-ico">🔍</div>
+          <div class="ide-ico">⎇</div>
+        </div>
+        <div class="ide-side">
+          <h4>Explorer</h4>
+          <div class="ide-file">src</div>
+          <div class="ide-file on">app.tsx</div>
+          <div class="ide-file">.cursor/rules</div>
+        </div>
+        <div class="ide-main">
+          <div class="ide-tabs">app.tsx</div>
+          <div class="ide-code">
+            <span class="kw">export function</span> App() {<br>
+            &nbsp;&nbsp;<span class="kw">return</span> &lt;<span class="str">Page</span> /&gt;<br>
+            }
+          </div>
+        </div>
+        <div class="ide-chat">
+          <div class="chat-head">Composer</div>
+          <div class="chat-log" id="chatLog"></div>
+          <div class="chat-input" id="chatInput"><span id="typed"></span><span class="caret" id="caret"></span></div>
+        </div>
+      </div>
+    </div>
+    <div class="stamp" id="stamp"><div class="stamp-card">CONTEXT FULL</div></div>
+
+    <div class="scene" id="cxScene">
+      <div class="cx">
+        <div class="cx-top">
+          <div class="cx-pill"><img src="cursor-logo.png" alt=""> Cursor</div>
+          <div class="cx-pill"><img src="claude-logo.png" alt=""> Claude Opus 5</div>
+          <div class="cx-stats">
+            <div class="cx-stat cost bad" id="stCost"><span class="l">💰 Cost</span><span class="v" id="costV">$4.80/prompt</span></div>
+            <div class="cx-stat speed bad" id="stSpeed"><span class="l">⚡ Speed</span><span class="v" id="speedV">8 tok/s</span></div>
+            <div class="cx-stat ctx bad" id="stCtx"><span class="l">🪟 Context used</span><span class="v" id="ctxV">100% FULL</span></div>
+          </div>
+          <div class="cx-trash" id="cxTrash">🗑️</div>
+        </div>
+        <div class="cx-board" id="cxBoard"></div>
+      </div>
+    </div>
+
+    <div class="end" id="endScene">
+      <div class="logo">
+        <div class="logo-blocks">
+          <div class="logo-block lb-red"></div>
+          <div class="logo-block lb-blue"></div>
+          <div class="logo-block lb-yellow"></div>
+        </div>
+        <span class="logo-word">Contexy</span>
+      </div>
+    </div>
+
+    <svg class="ptr" id="ptr" viewBox="0 0 24 24" fill="none">
+      <path d="M4 3l12 9-6 1 2 8-4-7-5-1z" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+    </svg>
+  </div>
+</div>
+<script>
+  const PAL = ['#3b82f6','#f59e0b','#8b5cf6','#f97316','#e11d48','#14b8a6','#93b8fa','#fcd34d','#a5a8f6','#7edcd2','#fdba74','#c4b5fd'];
+  const stage = document.getElementById('stage');
+  const ptr = document.getElementById('ptr');
+  const typed = document.getElementById('typed');
+  const chatLog = document.getElementById('chatLog');
+  const board = document.getElementById('cxBoard');
+  const trash = document.getElementById('cxTrash');
+  const costV = document.getElementById('costV');
+  const speedV = document.getElementById('speedV');
+  const ctxV = document.getElementById('ctxV');
+
+  let px = 700, py = 400;
+  ptr.style.left = px + 'px';
+  ptr.style.top = py + 'px';
+
+  const PAUSE = new URLSearchParams(location.search).get('pause')
+    || (location.hash.startsWith('#pause=') ? decodeURIComponent(location.hash.slice(7)) : '');
+  let beat = '';
+  const frozen = () => PAUSE && beat === PAUSE;
+  const skip = () => PAUSE && beat !== PAUSE;
+
+  const sleep = (ms) => new Promise((r) => {
+    if (frozen()) { setTimeout(r, 60000); return; } // stay on this beat; virtual-time still paints
+    if (skip()) { r(); return; }   // fast-forward to the named beat
+    setTimeout(r, ms);
+  });
+  function mark(name) { beat = name; document.body.dataset.beat = name; }
+
+  function ease(t) { return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; }
+
+  function putPtr(x, y) {
+    px = x; py = y;
+    ptr.style.left = px + 'px';
+    ptr.style.top = py + 'px';
+  }
+
+  async function moveTo(x, y, ms) {
+    if (skip() || frozen()) { putPtr(x, y); return; }
+    const x0 = px, y0 = py;
+    const steps = Math.max(8, Math.round(ms / 16));
+    for (let i = 1; i <= steps; i++) {
+      const k = ease(i / steps);
+      putPtr(x0 + (x - x0) * k, y0 + (y - y0) * k);
+      await sleep(ms / steps);
+      if (frozen()) return;
+    }
+  }
+
+  function clickFx() {
+    if (skip()) return;
+    const r = document.createElement('div');
+    r.className = 'click-rip';
+    r.style.left = (px - 5) + 'px';
+    r.style.top = (py - 5) + 'px';
+    stage.appendChild(r);
+    setTimeout(() => r.remove(), 480);
+  }
+
+  async function typeText(str, cps) {
+    if (skip()) { typed.textContent += str; return; }
+    for (const ch of str) {
+      typed.textContent += ch;
+      await sleep(cps);
+      if (frozen()) return;
+    }
+  }
+
+  function addBubble(kind, text) {
+    const b = document.createElement('div');
+    b.className = 'bubble ' + kind;
+    b.textContent = text;
+    chatLog.appendChild(b);
+    while (chatLog.children.length > 4) chatLog.firstChild.remove();
+    chatLog.scrollTop = chatLog.scrollHeight;
+    return b;
+  }
+
+  function centerOf(el) {
+    const r = el.getBoundingClientRect();
+    const s = stage.getBoundingClientRect();
+    return { x: r.left - s.left + r.width / 2, y: r.top - s.top + r.height / 2 };
+  }
+
+  const NAMES = [
+    'auth.mdc','errors.mdc','review/SKILL.md','imports.mdc','a11y.mdc','no-any.mdc',
+    'tailwind.mdc','zod.mdc','env.mdc','pnpm.mdc','canvas/SKILL.md','e2e/SKILL.md',
+    'commits.mdc','dark-mode.mdc','prisma/SKILL.md','mcp/SKILL.md','hooks.mdc','ci.mdc',
+  ];
+  const tiles = [];
+  for (let i = 0; i < 40; i++) {
+    const t = document.createElement('div');
+    t.className = 'tile';
+    t.style.background = PAL[i % PAL.length];
+    const label = NAMES[i % NAMES.length].replace(/\.mdc$/, '');
+    t.innerHTML = '<div class="tn"></div><div class="tt"></div>';
+    t.querySelector('.tn').textContent = label;
+    t.querySelector('.tt').textContent = ((40 - i) * 0.4 + 0.3).toFixed(1) + 'k';
+    board.appendChild(t);
+    tiles.push(t);
+  }
+
+  const BARRAGE = [
+    'Make a rule for imports', 'Skill: write tests', 'Rule for a11y', 'Skill: commit messages',
+    'Rule: no any', 'Skill: prisma', 'Rule: tailwind v4', 'Skill: dark mode',
+    'Rule: env files', 'Skill: review PRs', 'Rule: zod', 'Skill: canvas',
+    'Rule: pnpm only', 'Skill: e2e', 'Rule: no console', 'Skill: mcp',
+  ];
+
+  async function play() {
+    const input = document.getElementById('chatInput');
+    const stamp = document.getElementById('stamp');
+    mark('start');
+    await sleep(500);
+    const p0 = centerOf(input);
+    await moveTo(p0.x, p0.y, 650);
+    clickFx();
+    await sleep(160);
+
+    mark('type1');
+    await typeText('Make a rule for authentication', 36);
+    await sleep(380);
+    addBubble('user', 'Make a rule for authentication');
+    typed.textContent = '';
+    await sleep(320);
+    addBubble('bot', 'Created .cursor/rules/auth.mdc');
+    mark('rule1');
+    await sleep(850);
+
+    mark('type2');
+    await typeText('Actually, make another rule for error handling', 30);
+    await sleep(240);
+    addBubble('user', 'Actually, make another rule for error handling');
+    typed.textContent = '';
+    addBubble('bot', 'Created .cursor/rules/errors.mdc');
+    mark('rule2');
+    await sleep(480);
+
+    mark('type3');
+    await typeText('Also make a skill for code review', 24);
+    await sleep(160);
+    addBubble('user', 'Also make a skill for code review');
+    typed.textContent = '';
+    addBubble('bot', 'Created .cursor/skills/review/SKILL.md');
+    mark('skill1');
+    await sleep(260);
+
+    mark('barrage');
+    let delay = 200;
+    for (let i = 0; i < BARRAGE.length; i++) {
+      addBubble('user', BARRAGE[i]);
+      if (i % 2 === 1) addBubble('bot', 'Done.');
+      stage.style.filter = `blur(${Math.min(1.6, i * 0.08)}px)`;
+      await sleep(delay);
+      delay = Math.max(42, delay * 0.84);
+    }
+    stage.style.filter = 'none';
+    typed.textContent = '';
+    await sleep(220);
+
+    mark('hey');
+    await typeText('Hey Agent, are you there?', 40);
+    await sleep(360);
+    addBubble('user', 'Hey Agent, are you there?');
+    typed.textContent = '';
+    await sleep(640);
+    stamp.classList.add('on');
+    ptr.classList.add('hide');
+    mark('full');
+    await sleep(1200);
+
+    stage.style.transition = 'transform 0.8s cubic-bezier(0.2, 0.8, 0.2, 1), filter 0.8s ease';
+    stage.style.filter = 'blur(10px)';
+    stage.style.transform = 'scale(1.28)';
+    await sleep(480);
+    stamp.classList.remove('on');
+    document.getElementById('ideScene').classList.remove('on');
+    document.getElementById('cxScene').classList.add('on');
+    stage.style.filter = 'none';
+    stage.style.transform = 'none';
+    ptr.classList.remove('hide');
+    mark('messy');
+    await sleep(700);
+
+    // survivors are tiles 0–5 (the labeled clean board). First drag and the
+    // barrage trash the extras so the ending isn't an empty grid.
+    const first = tiles[6];
+    let p = centerOf(first);
+    await moveTo(p.x, p.y, 480);
+    clickFx();
+    p = centerOf(trash);
+    await moveTo(p.x, p.y, 620);
+    first.classList.add('gone');
+    trash.classList.add('hot');
+    costV.textContent = '$4.12/prompt';
+    await sleep(180);
+    trash.classList.remove('hot');
+
+    const costEl = document.getElementById('stCost');
+    p = centerOf(costEl);
+    stage.style.transition = 'transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1)';
+    stage.style.transformOrigin = `${p.x}px ${p.y}px`;
+    stage.style.transform = 'scale(1.7)';
+    await sleep(620);
+    costV.textContent = '$3.40/prompt';
+    mark('zoomcost');
+    await sleep(480);
+    stage.style.transform = 'none';
+    stage.style.transformOrigin = 'center center';
+    await sleep(240);
+
+    let c = 3.40;
+    for (let i = 7; i < tiles.length; i++) {
+      tiles[i].classList.add('gone');
+      c = Math.max(0.18, c - 0.1);
+      costV.textContent = (c >= 1 ? '$' + c.toFixed(2) : (c * 100).toFixed(0) + '¢') + '/prompt';
+      if (i === 14) { speedV.textContent = '24 tok/s'; ctxV.textContent = '72%'; }
+      if (i === 24) {
+        speedV.textContent = '55 tok/s';
+        ctxV.textContent = '41%';
+        document.getElementById('stSpeed').classList.remove('bad');
+      }
+      await sleep(Math.max(45, 150 - (i - 6) * 4));
+    }
+    document.getElementById('stCost').classList.remove('bad');
+    document.getElementById('stCtx').classList.remove('bad');
+    costV.textContent = '18.4¢/prompt';
+    speedV.textContent = '90 tok/s';
+    ctxV.textContent = '11.1k / 1M';
+    board.classList.add('clean');
+    mark('clean');
+    await sleep(1000);
+
+    ptr.classList.add('hide');
+    document.getElementById('endScene').classList.add('on');
+    document.getElementById('cxScene').classList.remove('on');
+    mark('logo');
+  }
+
+  play().catch((err) => { console.error(err.stack); throw err; });
+</script>
+</body>
+</html>

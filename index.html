@@ -1,0 +1,1968 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>contexty</title>
+<style>
+  :root {
+    --bg: #eceef2;
+    --ink: rgba(10, 12, 18, 0.85);
+    --ink-soft: rgba(10, 12, 18, 0.52);
+    --label: #9aa1ad;
+    --green: #2aa838;
+    --red: #e0302e;
+    --frame-shadow: 0 10px 24px rgba(15, 20, 35, 0.16), 0 2px 6px rgba(15, 20, 35, 0.08);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body { height: 100%; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Inter, system-ui, sans-serif;
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+    padding: 28px 32px 32px;
+    gap: 26px;
+    min-height: 100vh;
+    /* stray drags shouldn't highlight tile text */
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* ---- Top bar: pickers | packed stats | kind switch.
+     Side columns absorb leftover space so the white stats card stays
+     content-sized — no empty gutters inside Cost / Speed / Context. ---- */
+  .topbar {
+    display: grid;
+    grid-template-columns: minmax(min-content, 1fr) auto minmax(min-content, 1fr);
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+  }
+
+  .pickers {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 8px;
+    justify-self: start;
+  }
+
+  .top-right {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 8px;
+    justify-self: end;
+  }
+
+  .ide-picker.open { z-index: 1002; }
+
+  #modelName { max-width: 18ch; }
+
+  .top-right { justify-content: flex-end; align-items: center; }
+
+  /* Rules | Skills — same card language as the pickers */
+  .kind-switch {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    background: #fff;
+    border: 1px solid rgba(15, 20, 35, 0.06);
+    border-radius: 18px;
+    padding: 4px;
+    box-shadow: var(--frame-shadow);
+    height: 48px;
+  }
+
+  .kind-switch button {
+    border: none;
+    background: none;
+    border-radius: 14px;
+    padding: 8px 14px;
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--ink-soft);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .kind-switch button:hover { color: var(--ink); }
+  .kind-switch button[aria-selected="true"] {
+    background: rgba(15, 20, 35, 0.08);
+    color: var(--ink);
+  }
+
+  .ide-picker {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #fff;
+    border: 1px solid rgba(15, 20, 35, 0.06);
+    border-radius: 18px;
+    padding: 8px 14px;
+    box-shadow: var(--frame-shadow);
+    min-width: 0;
+    flex: 0 0 auto;
+  }
+
+  .ide-picker img {
+    width: 28px;
+    height: 28px;
+    border-radius: 7px;
+    flex-shrink: 0;
+  }
+
+  .ide-name {
+    display: inline-block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ide-trigger {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: none;
+    border: none;
+    padding: 0;
+    font-family: inherit;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--ink);
+    cursor: pointer;
+    white-space: nowrap;
+    min-width: 0;
+  }
+
+  .ide-caret {
+    font-size: 17px;
+    color: var(--ink-soft);
+    margin-left: 2px;
+    transition: transform 0.15s ease;
+  }
+
+  .ide-picker.open .ide-caret { transform: rotate(180deg); }
+
+  .ide-menu {
+    position: absolute;
+    top: calc(100% + 10px);
+    left: 0;
+    min-width: 100%;
+    width: max-content;
+    background: #fff;
+    border: 1px solid rgba(15, 20, 35, 0.06);
+    border-radius: 22px;
+    padding: 8px 4px 8px 8px;
+    box-shadow: 0 14px 30px rgba(15, 20, 35, 0.25);
+    z-index: 1000;
+    transform-origin: top left;
+    animation: menu-in 0.15s ease;
+    overflow: hidden; /* native overlay bar stays inside the 22px card */
+  }
+  .ide-menu-list {
+    max-height: calc(6 * 64px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-right: 4px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(15, 20, 35, 0.28) transparent;
+  }
+  .ide-menu-list::-webkit-scrollbar { width: 8px; }
+  .ide-menu-list::-webkit-scrollbar-track {
+    margin: 10px 0;
+    background: transparent;
+  }
+  .ide-menu-list::-webkit-scrollbar-thumb {
+    background: rgba(15, 20, 35, 0.28);
+    border-radius: 99px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+
+  @keyframes menu-in {
+    from { opacity: 0; transform: translateY(-6px) scale(0.97); }
+    to { opacity: 1; transform: none; }
+  }
+
+  .ide-option {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    background: none;
+    border: none;
+    border-radius: 13px;
+    padding: 10px 14px;
+    font-family: inherit;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--ink);
+    cursor: pointer;
+    text-align: left;
+    white-space: nowrap;
+  }
+
+  .ide-option:hover, .ide-option:focus-visible { background: rgba(15, 20, 35, 0.06); outline: none; }
+
+  .ide-option img {
+    width: 30px;
+    height: 30px;
+    border-radius: 7px;
+  }
+
+  .ide-option .check {
+    margin-left: auto;
+    padding-left: 14px;
+    color: var(--ink-soft);
+    visibility: hidden;
+  }
+
+  .ide-option[aria-selected="true"] .check { visibility: visible; }
+
+  /* model options carry a second line: live $/MTok + context window */
+  .ide-option .labels { display: flex; flex-direction: column; align-items: flex-start; }
+  .ide-option .sub {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--label);
+    margin-top: 2px;
+  }
+
+  .empty-note {
+    margin: auto;
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--ink-soft);
+  }
+
+  /* ---- Hover tooltip — same card language as the rest of the chrome ---- */
+  .tip {
+    position: fixed;
+    z-index: 1002;
+    max-width: 400px;
+    background: #fff;
+    border: 1px solid rgba(15, 20, 35, 0.06);
+    border-radius: 15px;
+    padding: 14px 18px;
+    box-shadow: 0 14px 30px rgba(15, 20, 35, 0.25);
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(4px);
+    transition: opacity 0.15s ease, transform 0.15s ease;
+  }
+
+  .tip.show { opacity: 1; transform: none; }
+
+  .tip-name {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: "SF Mono", ui-monospace, Menlo, monospace;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--ink);
+  }
+
+  .tip-desc {
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--ink-soft);
+    margin-top: 7px;
+  }
+
+  .tip-meta {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--label);
+    margin-top: 8px;
+  }
+
+  .tip-path {
+    font-family: "SF Mono", ui-monospace, Menlo, monospace;
+    font-size: 11px;
+    color: var(--label);
+    margin-top: 5px;
+    word-break: break-all;
+  }
+
+  .tip-desc:empty, .tip-path:empty { display: none; }
+
+  /* traffic-light verdict row inside the tooltip — says WHY the ring is that color */
+  .tip-verdict {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.45;
+    margin-top: 8px;
+  }
+  .tip-verdict[hidden] { display: none; }
+  .tip-verdict .tv-dot { width: 10px; height: 10px; border-radius: 4px; margin-top: 3.5px; flex-shrink: 0; }
+  .tip-verdict.g { color: #1f8c2c; }
+  .tip-verdict.g .tv-dot { background: #2aa838; }
+  .tip-verdict.o { color: #b45309; }
+  .tip-verdict.o .tv-dot { background: #f59e0b; }
+  .tip-verdict.r { color: #b91c1c; }
+  .tip-verdict.r .tv-dot { background: #e0302e; }
+
+  /* ---- Odometer digits (cost / speed) ---- */
+  .odometer { display: inline-flex; line-height: 1; font-variant-numeric: tabular-nums; }
+  .od-col { display: inline-block; height: 1em; overflow: hidden; }
+  .od-strip {
+    display: flex;
+    flex-direction: column;
+    transition: transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .od-strip span { height: 1em; }
+
+  .block.trashed {
+    flex: 0.0001 !important;
+    opacity: 0;
+    padding: 0 !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+  }
+
+  /* ---- Header: cost / speed, big + centered ---- */
+  .statbar {
+    display: flex;
+    align-items: stretch;
+    gap: 28px;
+    background: #fff;
+    border: 1px solid rgba(15, 20, 35, 0.06);
+    border-radius: 22px;
+    padding: 12px 22px;
+    box-shadow: var(--frame-shadow);
+    width: max-content;
+    justify-self: center;
+  }
+
+  .stat { display: flex; flex-direction: column; gap: 6px; }
+
+  .stat-label {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--label);
+  }
+
+  .stat-value {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 26px;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+  }
+
+  .stat-value .dot {
+    width: 15px;
+    height: 15px;
+    border-radius: 5px;
+    flex-shrink: 0;
+  }
+
+  .stat.cost .stat-value { color: var(--green); }
+  .stat.cost .dot { background: var(--green); }
+  .stat.speed .stat-value { color: var(--red); }
+  .stat.speed .dot { background: var(--red); }
+  .stat.ctx .stat-value { color: #2563eb; }
+  .stat.ctx .dot { background: #2563eb; }
+
+  .statbar .divider {
+    width: 1px;
+    background: rgba(15, 20, 35, 0.1);
+  }
+
+  /* ---- Treemap canvas ---- */
+  .stage {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+  }
+  .canvas {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    background: #fff;
+    border: 1px solid rgba(15, 20, 35, 0.06);
+    border-radius: 26px;
+    padding: 16px;
+    box-shadow: var(--frame-shadow);
+    display: flex;
+    gap: 13px;
+  }
+  /* keep the hidden tab laid out (same size as the visible one) so
+     switching Rules ↔ Skills does not re-squarify from a 0×0 box */
+  .canvas[hidden] {
+    display: flex !important;
+    visibility: hidden;
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+
+  .col, .row { display: flex; gap: 13px; min-width: 0; min-height: 0; flex: 1 1 0; transition: flex-grow 0.45s ease; }
+  .col { flex-direction: column; }
+
+  /* readability floors are heights only — a min-width on columns is what
+     shoved the last tile off the right of the canvas */
+  .col { min-width: 0; }
+  .row { min-height: 120px; min-width: 0; }
+  .block.big { min-height: 120px; }
+  .block.med { min-height: 100px; }
+
+  .block {
+    position: relative;
+    container-type: inline-size;
+    min-width: 0; /* allow the token-share flex to actually shrink */
+    border-radius: 15px;
+    overflow: hidden;
+    box-shadow: 0 8px 18px rgba(15, 20, 35, 0.22), 0 2px 5px rgba(15, 20, 35, 0.1);
+    transition: transform 0.15s ease, box-shadow 0.15s ease, flex-grow 0.45s ease, opacity 0.3s ease, padding 0.45s ease;
+  }
+
+  /* per-tile remove — click opens the confirm card */
+  .block-trash {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 3;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.82);
+    box-shadow: 0 2px 7px rgba(15, 20, 35, 0.2);
+    font-size: 18px;
+    font-weight: 600;
+    line-height: 1;
+    color: var(--ink);
+    cursor: pointer;
+    padding: 0;
+  }
+  .block-trash:hover { background: #fff; transform: scale(1.08); }
+  .block.cell .block-trash {
+    top: 6px;
+    right: 6px;
+    width: 24px;
+    height: 24px;
+    font-size: 15px;
+    border-radius: 8px;
+  }
+
+  .block:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 14px 28px rgba(15, 20, 35, 0.28), 0 3px 8px rgba(15, 20, 35, 0.12);
+  }
+
+  .block h2 {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-weight: 700;
+    color: var(--ink);
+    white-space: nowrap;
+    overflow: hidden;
+  }
+
+  .block h2 .t { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .block .tokens { overflow: hidden; text-overflow: ellipsis; }
+
+  .block .tokens {
+    font-weight: 500;
+    color: var(--ink-soft);
+    white-space: nowrap;
+  }
+
+  /* Medium labeled blocks — extra right pad so the trash button doesn't cover the name */
+  .block.med { padding: 20px 48px 20px 22px; }
+  .block.med h2 { font-family: "SF Mono", ui-monospace, Menlo, monospace; font-size: 18px; gap: 10px; }
+  .block.med h2 .ico { font-size: 21px; }
+  .block.med .tokens { font-size: 16px; margin-top: 5px; }
+
+  /* The giant standouts */
+  .block.big { padding: 28px 52px 28px 32px; }
+  .block.big h2 { font-family: "SF Mono", ui-monospace, Menlo, monospace; font-size: 28px; font-weight: 800; gap: 14px; }
+  .block.big h2 .ico { font-size: 34px; }
+  .block.big .tokens { font-size: 18px; margin-top: 8px; }
+
+  /* Squarified treemap of the remaining rule files */
+  .treemap {
+    position: relative;
+    min-height: 180px;
+    margin: -5px;
+    transition: flex-grow 0.45s ease;
+  }
+
+  /* text steps down (instead of clipping) as its block narrows */
+  @container (max-width: 440px) {
+    .block.big h2 { font-size: 22px; }
+    .block.big h2 .ico { font-size: 26px; }
+    .block.big .tokens { font-size: 15px; }
+  }
+
+  @container (max-width: 340px) {
+    .block.big h2 { font-size: 18px; }
+    .block.big h2 .ico { font-size: 21px; }
+    .block.big .tokens { font-size: 13px; }
+  }
+
+  @container (max-width: 230px) {
+    .block.med h2 { font-size: 15px; }
+    .block.med h2 .ico { font-size: 18px; }
+    .block.med .tokens { font-size: 13px; }
+  }
+
+  .block.cell {
+    position: absolute;
+    border-radius: 12px;
+    padding: 14px 36px 14px 16px;
+    box-shadow: 0 5px 12px rgba(15, 20, 35, 0.18), 0 1px 3px rgba(15, 20, 35, 0.08);
+    transition: left 0.45s ease, top 0.45s ease, width 0.45s ease, height 0.45s ease, transform 0.15s ease, box-shadow 0.15s ease, opacity 0.3s ease;
+  }
+
+  .block.cell h3 {
+    font-family: "SF Mono", ui-monospace, Menlo, monospace;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--ink);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
+  }
+
+  .block.cell .tokens { font-size: 11.5px; margin-top: 3px; }
+
+  /* ---- Trash confirm card — the consent step before a real ~/.Trash move ---- */
+  .confirm-veil {
+    position: fixed;
+    inset: 0;
+    z-index: 1005;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(236, 238, 242, 0.55);
+    backdrop-filter: blur(7px);
+    -webkit-backdrop-filter: blur(7px);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+  }
+
+  .confirm-veil.show { opacity: 1; pointer-events: auto; }
+
+  .confirm-card {
+    max-width: 540px;
+    background: #fff;
+    border: 1px solid rgba(15, 20, 35, 0.06);
+    border-radius: 22px;
+    padding: 28px 34px;
+    box-shadow: 0 24px 60px rgba(15, 20, 35, 0.3);
+  }
+
+  .confirm-title {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-family: "SF Mono", ui-monospace, Menlo, monospace;
+    font-size: 21px;
+    font-weight: 800;
+    color: var(--ink);
+    word-break: break-all;
+  }
+
+  .confirm-path {
+    font-family: "SF Mono", ui-monospace, Menlo, monospace;
+    font-size: 12px;
+    color: var(--label);
+    margin-top: 9px;
+    word-break: break-all;
+  }
+  .confirm-path:empty { display: none; }
+
+  .confirm-desc {
+    font-size: 14.5px;
+    line-height: 1.5;
+    color: var(--ink-soft);
+    margin-top: 12px;
+  }
+
+  /* what deleting buys you, at the selected model's rates */
+  .confirm-gains { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; }
+
+  .gain {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14.5px;
+    font-weight: 800;
+    border-radius: 10px;
+    padding: 8px 12px;
+  }
+
+  .gain .g-dot { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
+  .gain.cost { color: var(--green); background: rgba(42, 168, 56, 0.1); }
+  .gain.cost .g-dot { background: var(--green); }
+  .gain.speed { color: #2563eb; background: rgba(37, 99, 235, 0.1); }
+  .gain.speed .g-dot { background: #2563eb; }
+
+  .confirm-error { color: var(--red); font-size: 13.5px; font-weight: 600; margin-top: 10px; }
+  .confirm-error:empty { display: none; }
+
+  .confirm-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 24px;
+  }
+
+  .confirm-btn {
+    border: none;
+    border-radius: 12px;
+    padding: 12px 22px;
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .confirm-btn.keep { background: rgba(15, 20, 35, 0.07); color: var(--ink); }
+  .confirm-btn.keep:hover { background: rgba(15, 20, 35, 0.12); }
+  .confirm-btn.trash-it { background: var(--red); color: #fff; }
+  .confirm-btn.trash-it:hover { filter: brightness(1.08); }
+
+  /* ---- Loading splash: Contexy logo only. Blocks use left/top/width/height
+     (those interpolate) — grid-template-* snaps, so it was never animating. ---- */
+  .splash {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg);
+    transition: opacity 0.5s ease, visibility 0.5s ease;
+  }
+
+  .splash.out { opacity: 0; visibility: hidden; pointer-events: none; }
+
+  .splash-logo {
+    display: flex;
+    align-items: center;
+    background: #fff;
+    border: 1px solid rgba(15, 20, 35, 0.06);
+    border-radius: 26px;
+    padding: 16px 30px 16px 16px;
+    box-shadow: var(--frame-shadow);
+  }
+
+  .splash-blocks {
+    position: relative;
+    width: 118px;
+    height: 92px;
+    flex-shrink: 0;
+  }
+
+  .splash-block {
+    position: absolute;
+    border-radius: 11px;
+    box-shadow: 0 5px 12px rgba(15, 20, 35, 0.18), 0 1px 3px rgba(15, 20, 35, 0.08);
+    animation-duration: 3.2s;
+    animation-timing-function: cubic-bezier(0.45, 0, 0.2, 1);
+    animation-iteration-count: infinite;
+  }
+
+  .sb-a { animation-name: splash-a; }
+  .sb-b { animation-name: splash-b; }
+  .sb-c { animation-name: splash-c; }
+
+  .splash-word {
+    margin-left: 18px;
+    font-size: 36px;
+    font-weight: 700;
+    color: #828282;
+    letter-spacing: -0.01em;
+  }
+
+  /* four treemap poses matching the logo, then back — colors cycle too */
+  @keyframes splash-a {
+    0%, 100% { left: 0;    top: 0;    width: 118px; height: 50px; background: #f80404; }
+    25%      { left: 48px; top: 0;    width: 70px;  height: 54px; background: #8b5cf6; }
+    50%      { left: 0;    top: 42px; width: 118px; height: 50px; background: #14b8a6; }
+    75%      { left: 0;    top: 48px; width: 54px;  height: 44px; background: #f97316; }
+  }
+  @keyframes splash-b {
+    0%, 100% { left: 0;    top: 57px; width: 68px;  height: 35px; background: #3d6ef2; }
+    25%      { left: 0;    top: 0;    width: 41px;  height: 92px; background: #f59e0b; }
+    50%      { left: 0;    top: 0;    width: 54px;  height: 35px; background: #e11d48; }
+    75%      { left: 61px; top: 48px; width: 57px;  height: 44px; background: #3d6ef2; }
+  }
+  @keyframes splash-c {
+    0%, 100% { left: 75px; top: 57px; width: 43px;  height: 35px; background: #ffe602; }
+    25%      { left: 48px; top: 61px; width: 70px;  height: 31px; background: #3b82f6; }
+    50%      { left: 61px; top: 0;    width: 57px;  height: 35px; background: #f97316; }
+    75%      { left: 0;    top: 0;    width: 118px; height: 41px; background: #ffe602; }
+  }
+</style>
+</head>
+<body data-palette="#3b82f6,#f59e0b,#8b5cf6,#f97316,#e11d48,#14b8a6">
+
+  <div class="splash" id="splash">
+    <div class="splash-logo">
+      <div class="splash-blocks">
+        <div class="splash-block sb-a"></div>
+        <div class="splash-block sb-b"></div>
+        <div class="splash-block sb-c"></div>
+      </div>
+      <span class="splash-word">Contexy</span>
+    </div>
+  </div>
+
+  <div class="topbar">
+    <div class="pickers">
+      <div class="ide-picker" id="idePicker">
+        <button class="ide-trigger" id="ideTrigger" aria-haspopup="listbox" aria-expanded="false" aria-label="Choose IDE">
+          <img id="ideLogo" src="cursor-logo.png" alt="">
+          <span class="ide-name" id="ideName">Cursor</span>
+          <span class="ide-caret" aria-hidden="true">▾</span>
+        </button>
+        <div class="ide-menu" id="ideMenu" hidden>
+          <div class="ide-menu-list" id="ideMenuList" role="listbox" aria-label="IDE"></div>
+        </div>
+      </div>
+      <div class="ide-picker" id="modelPicker">
+        <button class="ide-trigger" id="modelTrigger" aria-haspopup="listbox" aria-expanded="false" aria-label="Choose model">
+          <img id="modelLogo" src="claude-logo.png" alt="">
+          <span class="ide-name" id="modelName">Claude Fable 5</span>
+          <span class="ide-caret" aria-hidden="true">▾</span>
+        </button>
+        <div class="ide-menu" id="modelMenu" hidden>
+          <div class="ide-menu-list" id="modelMenuList" role="listbox" aria-label="Model"></div>
+        </div>
+      </div>
+    </div>
+
+    <header class="statbar">
+      <div class="stat cost" id="statCost">
+        <span class="stat-label">💰 Cost</span>
+        <span class="stat-value"><span class="dot"></span><span class="odometer" id="costOdo"></span></span>
+      </div>
+      <div class="divider"></div>
+      <div class="stat speed" id="statSpeed">
+        <span class="stat-label">⚡ Speed</span>
+        <span class="stat-value"><span class="dot"></span><span class="odometer" id="speedOdo"></span></span>
+      </div>
+      <div class="divider"></div>
+      <div class="stat ctx" id="statCtx">
+        <span class="stat-label">🪟 Context used</span>
+        <span class="stat-value"><span class="dot"></span><span class="odometer" id="ctxOdo"></span></span>
+      </div>
+    </header>
+
+    <div class="top-right">
+      <div class="kind-switch" id="kindSwitch" role="tablist" aria-label="File kind">
+        <button type="button" role="tab" data-kind="rule" aria-selected="true">Rules</button>
+        <button type="button" role="tab" data-kind="skill" aria-selected="false">Skills</button>
+      </div>
+    </div>
+  </div>
+
+  <main class="stage">
+  <div class="canvas" data-kind="rule">
+    <div class="col" style="flex: 40">
+      <div class="block big" data-tokens="2.4" style="flex: 54; background: #3b82f6">
+        <button type="button" class="block-trash" aria-label="Remove" title="Remove">×</button>
+        <h2><span class="ico">🧩</span><span class="t">server-components.md</span></h2>
+        <div class="tokens">2.4k tokens · used 5m ago</div>
+      </div>
+      <div class="block big" data-tokens="2.0" style="flex: 46; background: #f59e0b">
+        <button type="button" class="block-trash" aria-label="Remove" title="Remove">×</button>
+        <h2><span class="ico">🚨</span><span class="t">error-boundaries.md</span></h2>
+        <div class="tokens">2.0k tokens · used 32m ago</div>
+      </div>
+    </div>
+
+    <div class="col" style="flex: 26">
+      <div class="block big" data-tokens="1.6" style="flex: 56; background: #8b5cf6">
+        <button type="button" class="block-trash" aria-label="Remove" title="Remove">×</button>
+        <h2><span class="ico">🎨</span><span class="t">shadcn-ui.md</span></h2>
+        <div class="tokens">1.6k tokens · used 2w ago</div>
+      </div>
+      <div class="block big" data-tokens="1.3" style="flex: 44; background: #f97316">
+        <button type="button" class="block-trash" aria-label="Remove" title="Remove">×</button>
+        <h2><span class="ico">🚫</span><span class="t">no-any.md</span></h2>
+        <div class="tokens">1.3k tokens · used 3h ago</div>
+      </div>
+    </div>
+
+    <div class="col" style="flex: 34">
+      <div class="row" style="flex: 26">
+        <div class="block med" data-tokens="0.51" style="flex: 53; background: #e11d48">
+          <button type="button" class="block-trash" aria-label="Remove" title="Remove">×</button>
+          <h2><span class="ico">🛡️</span><span class="t">zod.md</span></h2>
+          <div class="tokens">0.5k · 3w ago</div>
+        </div>
+        <div class="block med" data-tokens="0.45" style="flex: 47; background: #14b8a6">
+          <button type="button" class="block-trash" aria-label="Remove" title="Remove">×</button>
+          <h2><span class="ico">📝</span><span class="t">markdown.md</span></h2>
+          <div class="tokens">0.5k · 12m ago</div>
+        </div>
+      </div>
+
+      <div class="treemap" style="flex: 74"></div>
+    </div>
+  </div>
+  <div class="canvas" data-kind="skill" hidden></div>
+  </main>
+
+  <script>
+    // click.wav on every in-app button (pickers, tabs, ×, confirm, menu rows)
+    (function () {
+      const src = 'click.wav';
+      const pool = [];
+      function playClick() {
+        let a = pool.find((x) => x.paused);
+        if (!a) {
+          a = new Audio(src);
+          a.volume = 0.3;
+          pool.push(a);
+        }
+        a.currentTime = 0;
+        a.play().catch((err) => { console.error('click sound failed:', err); });
+      }
+      document.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0) return;
+        if (e.target.closest('button')) playClick();
+      }, true);
+    })();
+    // The rest of the rules folder — the six biggest files are the labeled blocks to the left.
+    const RULES = [
+      ['tailwind-v4.md', 0.6, '2h'],
+      ['commits.md', 0.5, '2w'],
+      ['no-console.md', 0.4, '6d'],
+      ['a11y.md', 0.3, '4d'],
+      ['dark-mode.md', 0.3, '5d'],
+      ['react-query.md', 0.2, '6d'],
+      ['use-pnpm.md', 0.2, '3d'],
+      ['imports.md', 0.1, '5d'],
+      ['prettier.md', 0.05, '1d'],
+      ['env.md', 0.05, '2d'],
+      ['aliases.md', 0.05, '4d'],
+      ['hooks.md', 0.05, '6d'],
+      ['todos.md', 0.05, '1w'],
+    ];
+
+    const CELL_COLORS = ['#93b8fa', '#fcd34d', '#a5a8f6', '#7edcd2', '#fdba74', '#c4b5fd', '#fda4af', '#7dd3fc'];
+    const GAP = 10;
+
+    // one live canvas per Rules/Skills tab — switching only hides/shows, so
+    // the WinDirStat layout does not reshuffle
+    let currentKind = 'rule';
+    const boards = {
+      rule: { el: document.querySelector('.canvas[data-kind="rule"]'), cellEls: new Map(), rulesState: [], built: false, key: '' },
+      skill: { el: document.querySelector('.canvas[data-kind="skill"]'), cellEls: new Map(), rulesState: [], built: false, key: '' },
+    };
+    function canvasEl() { return boards[currentKind].el; }
+    function activateKind(kind) {
+      currentKind = kind;
+      cellEls = boards[kind].cellEls;
+      rulesState = boards[kind].rulesState;
+      boards.rule.el.hidden = kind !== 'rule';
+      boards.skill.el.hidden = kind !== 'skill';
+    }
+    let cellEls = boards.rule.cellEls;
+
+    // ---- Models: pinned fallback list (values checked against OpenRouter
+    // 2026-08-24) — /api/models overlays live pricing when the server is up.
+    // tps/prefill are speed-TIER ESTIMATES (OpenRouter's public stats expose
+    // no throughput) and every place they show discloses that.
+    const DEFAULT_MODELS = [
+      { id: 'anthropic/claude-fable-5', name: 'Claude Fable 5', logo: 'claude-logo.png', inPrice: 10, outPrice: 50, context: 1000000, tps: 50, prefill: 7000, uses: 0 },
+      { id: 'anthropic/claude-opus-5', name: 'Claude Opus 5', logo: 'claude-logo.png', inPrice: 5, outPrice: 25, context: 1000000, tps: 55, prefill: 8000, uses: 0 },
+      { id: 'anthropic/claude-sonnet-5', name: 'Claude Sonnet 5', logo: 'claude-logo.png', inPrice: 2, outPrice: 10, context: 1000000, tps: 75, prefill: 10000, uses: 0 },
+      { id: 'anthropic/claude-haiku-4.5', name: 'Claude Haiku 4.5', logo: 'claude-logo.png', inPrice: 1, outPrice: 5, context: 200000, tps: 120, prefill: 14000, uses: 0 },
+      { id: 'anthropic/claude-opus-4.8', name: 'Claude Opus 4.8', logo: 'claude-logo.png', inPrice: 5, outPrice: 25, context: 1000000, tps: 55, prefill: 8000, uses: 0 },
+      { id: 'anthropic/claude-sonnet-4.6', name: 'Claude Sonnet 4.6', logo: 'claude-logo.png', inPrice: 3, outPrice: 15, context: 1000000, tps: 70, prefill: 9000, uses: 0 },
+      { id: 'anthropic/claude-sonnet-4.5', name: 'Claude Sonnet 4.5', logo: 'claude-logo.png', inPrice: 3, outPrice: 15, context: 1000000, tps: 70, prefill: 9000, uses: 0 },
+      { id: 'openai/gpt-5.6-terra', name: 'GPT-5.6 Terra', logo: 'openai-logo.svg', inPrice: 2, outPrice: 12, context: 1050000, tps: 90, prefill: 10000, uses: 0 },
+      { id: 'openai/gpt-5.6-luna', name: 'GPT-5.6 Luna', logo: 'openai-logo.svg', inPrice: 0.2, outPrice: 1.2, context: 1050000, tps: 130, prefill: 14000, uses: 0 },
+      { id: 'google/gemini-3.1-pro-preview', name: 'Gemini 3.1 Pro', logo: 'gemini-logo.svg', inPrice: 2, outPrice: 12, context: 1048576, tps: 90, prefill: 10000, uses: 0 },
+      { id: 'google/gemini-3.7-flash', name: 'Gemini 3.7 Flash', logo: 'gemini-logo.svg', inPrice: 0.375, outPrice: 1.875, context: 1048576, tps: 150, prefill: 16000, uses: 0 },
+      { id: 'x-ai/grok-4.6', name: 'Grok 4.6', logo: 'x-ai-logo.png', inPrice: 2, outPrice: 6, context: 500000, tps: 95, prefill: 12000, uses: 0 },
+      { id: 'x-ai/grok-4.5', name: 'Grok 4.5', logo: 'x-ai-logo.png', inPrice: 2, outPrice: 6, context: 500000, tps: 95, prefill: 12000, uses: 0 },
+      { id: 'deepseek/deepseek-v4-pro', name: 'DeepSeek V4 Pro', logo: 'deepseek-logo.png', inPrice: 0.79, outPrice: 1.581, context: 1048576, tps: 90, prefill: 12000, uses: 0 },
+      { id: 'deepseek/deepseek-v4-flash', name: 'DeepSeek V4 Flash', logo: 'deepseek-logo.png', inPrice: 0.089, outPrice: 0.177, context: 1048576, tps: 140, prefill: 16000, uses: 0 },
+      { id: 'cursor/composer-2.5-fast', name: 'Composer 2.5 Fast', logo: 'cursor-logo.png', inPrice: 1.2, outPrice: 6, context: 200000, tps: 140, prefill: 16000, uses: 0 },
+    ];
+    let MODELS = DEFAULT_MODELS.map((m) => ({ ...m, live: false }));
+    let currentModel = MODELS[0];
+
+    // Live state (in memory only — a reload restores everything). Colors are
+    // pinned per name so they don't shift as items get trashed.
+    // Reassigned wholesale when /api/rules delivers real files (see bottom).
+    let usedVerb = 'used'; // real files report "edited" (git/mtime), demo says "used"
+
+    // ---- Staleness traffic light (shown as a colored verdict in the hover card) ----
+    // The rubric is usage recency, from the same evidence as the used/never-
+    // used labels (every local session store + file edit times):
+    //   green  — loaded into a session within the last 14 days
+    //   orange — used, but not in the last 45 days · or never used yet edited
+    //            in the last 14 days (too new for the history to judge)
+    //   red    — never used at all, or last use 45+ days back: dead weight
+    // "Superseded by newer tech" can't be read honestly from metadata alone,
+    // so the verdict sticks to what the evidence shows — the hover card says
+    // exactly why.
+    const DAY = 86400000;
+    function staleness(usedAt, editedAt, type, horizon) {
+      const now = Date.now();
+      const usedD = usedAt ? (now - usedAt) / DAY : null;
+      const editD = editedAt ? (now - editedAt) / DAY : null;
+      const ed = editD == null ? 'edit date unknown' : `edited ${agoStr(editedAt)} ago`;
+      if (usedD != null) {
+        if (usedD <= 14) return { ring: 'green', why: `in active use — loaded into a session ${agoStr(usedAt)} ago; earning its tokens` };
+        if (usedD <= 45) return { ring: 'orange', why: `going stale — last loaded ${agoStr(usedAt)} ago, ${ed}; check it still matches how you work` };
+        return { ring: 'red', why: `abandoned — last loaded ${agoStr(usedAt)} ago, ${ed} — update or delete` };
+      }
+      if (editD != null && editD <= 14) return { ring: 'orange', why: `unproven — never invoked${horizon}, but ${ed}; too new to condemn` };
+      return {
+        ring: 'red',
+        why: type === 'skill'
+          ? `dead weight — never invoked in any session${horizon}, ${ed}; only its 1-line description ever reaches a model — update or delete`
+          : `dead weight — never used in any session${horizon}, ${ed} — update or delete`,
+      };
+    }
+
+    function setVerdict(el, ring, why) {
+      if (!ring) return;
+      el.dataset.ring = ring;
+      el.dataset.why = why;
+    }
+
+    // demo timestamps only exist as "2h"/"3w" strings — parse them back
+    function agoToMs(s) {
+      const m = /^(\d+)([mhdw])$/.exec(s || '');
+      return m ? Number(m[1]) * { m: 60e3, h: 36e5, d: 864e5, w: 6048e5 }[m[2]] : null;
+    }
+
+    let rulesState = RULES.map(([name, v, ago], i) => {
+      const usedAt = Date.now() - (agoToMs(ago) || 0);
+      return { name, v, ago, usedAt, ...staleness(usedAt, null, 'rule', ''), color: CELL_COLORS[i % CELL_COLORS.length] };
+    });
+    boards.rule.rulesState = rulesState;
+
+    // Squarified treemap (Bruls et al.): rows laid along the shorter side,
+    // items added to a row while the worst aspect ratio keeps improving.
+    function worstAspect(row, side) {
+      const sum = row.reduce((a, r) => a + r.area, 0);
+      const thickness = sum / side;
+      let worst = 0;
+      for (const r of row) {
+        const len = r.area / thickness;
+        worst = Math.max(worst, thickness / len, len / thickness);
+      }
+      return worst;
+    }
+
+    function squarify(items, x, y, w, h) {
+      const rects = [];
+      let i = 0;
+      while (i < items.length && w > 1 && h > 1) {
+        const horiz = w >= h;
+        const side = horiz ? h : w;
+        let row = [items[i]];
+        let j = i + 1;
+        while (j < items.length && worstAspect(row.concat(items[j]), side) <= worstAspect(row, side)) {
+          row.push(items[j]);
+          j++;
+        }
+        const thickness = row.reduce((a, r) => a + r.area, 0) / side;
+        let offset = 0;
+        for (const r of row) {
+          const len = r.area / thickness;
+          rects.push(horiz
+            ? { ...r, x: x, y: y + offset, w: thickness, h: len }
+            : { ...r, x: x + offset, y: y, w: len, h: thickness });
+          offset += len;
+        }
+        if (horiz) { x += thickness; w -= thickness; }
+        else { y += thickness; h -= thickness; }
+        i = j;
+      }
+      return rects;
+    }
+
+    // Reconciling render: existing cells are moved/resized in place (their CSS
+    // transitions make the treemap visibly re-fill when an item is trashed).
+    function render() {
+      const el = canvasEl().querySelector('.treemap');
+      if (!el) return;
+      const W = el.clientWidth, H = el.clientHeight;
+      // drop the smallest cells until every remaining one has room after GAP —
+      // otherwise they overflow the rounded canvas (see the screenshot)
+      // drop until every remaining cell can show its name (110×50) — unlabeled
+      // slivers were the leftover "clip" in the bottom-right of the board
+      const MIN_W = 110, MIN_H = 50;
+      let shown = rulesState.slice();
+      let laid = [];
+      while (shown.length) {
+        const tot = shown.reduce((a, r) => a + r.v, 0);
+        if (!tot) { shown = []; break; }
+        if (W < 40 || H < 40) return; // mid-flex animation — don't wipe
+        laid = squarify(shown.map((r) => ({ ...r, area: (r.v / tot) * W * H })), 0, 0, W, H);
+        const strip = laid.some((r) => (r.w - GAP) < MIN_W || (r.h - GAP) < MIN_H);
+        if (!strip || shown.length === 1) break;
+        shown = shown.slice(0, -1);
+      }
+      const seen = new Set();
+      if (shown.length) {
+        for (const r of laid) {
+          seen.add(r.name);
+          let d = cellEls.get(r.name);
+          const isNew = !d;
+          if (isNew) {
+            d = document.createElement('div');
+            d.className = 'block cell';
+            d.dataset.name = r.name;
+            d.dataset.tokens = r.v;
+            cellEls.set(r.name, d);
+          }
+          d.style.left = (r.x + GAP / 2) + 'px';
+          d.style.top = (r.y + GAP / 2) + 'px';
+          d.style.width = (r.w - GAP) + 'px';
+          d.style.height = (r.h - GAP) + 'px';
+          d.style.background = r.color;
+          setVerdict(d, r.ring, r.why);
+          const trashBtn = '<button type="button" class="block-trash" aria-label="Remove" title="Remove">×</button>';
+          if (r.w - GAP > 110 && r.h - GAP > 50) {
+            d.innerHTML = trashBtn + '<h3></h3><div class="tokens"></div>';
+            d.querySelector('h3').textContent = r.name;
+            d.querySelector('.tokens').textContent = r.verb === 'edited'
+              ? `${r.v.toFixed(1)}k · never used`
+              : `${r.v.toFixed(1)}k · ${r.verb || usedVerb} ${r.ago} ago`;
+          } else {
+            d.innerHTML = trashBtn;
+          }
+          if (isNew) el.appendChild(d); // styled before append: no phantom slide-in
+        }
+      }
+      for (const [name, d] of cellEls) {
+        if (!seen.has(name)) { cellEls.delete(name); d.remove(); }
+      }
+    }
+
+    window.addEventListener('resize', render);
+    render();
+
+    // ---- Odometer stats (roll down for cost, up for speed) ----
+    class Odometer {
+      constructor(el) { this.el = el; this.slots = []; this.value = ''; }
+      set(str) {
+        const cs = [...str];
+        const sameShape = cs.length === this.slots.length && cs.every((c, i) =>
+          /\d/.test(c) === this.slots[i].digit && (/\d/.test(c) || this.slots[i].char === c));
+        if (!sameShape) {
+          this.rebuild(cs, this.value);
+          this.el.getBoundingClientRect(); // flush so the next transform actually transitions
+        }
+        this.apply(cs, true);
+        this.value = str;
+      }
+      apply(cs, animate) {
+        cs.forEach((c, i) => {
+          const slot = this.slots[i];
+          if (!slot || !slot.digit) return;
+          slot.strip.style.transition = animate ? '' : 'none';
+          slot.strip.style.transform = `translateY(${-Number(c)}em)`;
+        });
+      }
+      rebuild(cs, prev) {
+        // right-align the previous digits onto the new shape so 90 → 150
+        // rolls 0→1, 9→5, 0→0 instead of snapping from a freshly-built 000
+        const oldDigits = [...(prev || '')].filter((c) => /\d/.test(c)).map(Number);
+        this.el.textContent = '';
+        this.slots = cs.map((c) => {
+          if (/\d/.test(c)) {
+            const col = document.createElement('span');
+            col.className = 'od-col';
+            const strip = document.createElement('span');
+            strip.className = 'od-strip';
+            for (let d = 0; d <= 9; d++) {
+              const n = document.createElement('span');
+              n.textContent = d;
+              strip.appendChild(n);
+            }
+            col.appendChild(strip);
+            this.el.appendChild(col);
+            return { digit: true, strip };
+          }
+          const span = document.createElement('span');
+          span.textContent = c === ' ' ? ' ' : c;
+          this.el.appendChild(span);
+          return { digit: false, char: c };
+        });
+        const newIdx = [];
+        cs.forEach((c, i) => { if (/\d/.test(c)) newIdx.push(i); });
+        const starts = new Array(cs.length).fill(0);
+        let oi = oldDigits.length - 1;
+        for (let n = newIdx.length - 1; n >= 0; n--) {
+          starts[newIdx[n]] = oi >= 0 ? oldDigits[oi--] : 0;
+        }
+        this.slots.forEach((slot, i) => {
+          if (!slot.digit) return;
+          slot.strip.style.transition = 'none';
+          slot.strip.style.transform = `translateY(${-starts[i]}em)`;
+        });
+      }
+    }
+
+    const costOdo = new Odometer(document.getElementById('costOdo'));
+    const speedOdo = new Odometer(document.getElementById('speedOdo'));
+    const ctxOdo = new Odometer(document.getElementById('ctxOdo'));
+    // Real math, not vibes: cost = tokens × the selected model's live input
+    // price; speed = the model's output tok/s tier estimate. Assumptions are
+    // disclosed in the hover titles.
+    let contextTokens = 0;         // raw tokens currently on the board
+    // window size of the SELECTED model — Grok 500k, Haiku 200k, Opus 1M, etc.
+    const ctxStr = (c) => {
+      if (c >= 950000) {
+        const mil = c / 1e6;
+        return (Math.abs(mil - Math.round(mil)) < 0.02
+          ? String(Math.round(mil))
+          : mil.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')) + 'M';
+      }
+      return Math.round(c / 1000) + 'k';
+    };
+    const tokStr = (n) => (n >= 100000 ? Math.round(n / 1000) + 'k' : n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(Math.round(n)));
+    const dollarsStr = (d) => '$' + d.toFixed(2);
+    // SPEED falls as the window fills (empty → 2× model tps, packed → model tps)
+    // so deleting a file raises tok/s — same curve the confirm chip quotes.
+    function speedFor(tokens) {
+      const m = currentModel;
+      const ctx = Math.max(1, m.context);
+      return m.tps * 2 * ctx / (ctx + Math.max(0, tokens));
+    }
+    function updateStats() {
+      const m = currentModel;
+      const dollars = (contextTokens / 1e6) * m.inPrice;
+      costOdo.set(dollarsStr(dollars) + '/prompt');
+      speedOdo.set(Math.round(speedFor(contextTokens)) + ' tok/s');
+      ctxOdo.set(tokStr(contextTokens) + ' / ' + ctxStr(m.context));
+      document.getElementById('statCost').title =
+        `Context tokens × $${m.inPrice}/MTok — ${m.name} input rate${m.live ? ' (live OpenRouter price)' : ' (pinned price — live fetch unavailable)'}. With prompt caching, repeat prompts cost ~10% of this.`;
+      document.getElementById('statSpeed').title =
+        `~${Math.round(speedFor(contextTokens))} tokens/second effective — ${m.name}'s ${m.tps} tok/s tier, slowed by the current context load. Not a live measurement.`;
+      document.getElementById('statCtx').title =
+        `${Math.round(contextTokens).toLocaleString()} tokens across this IDE's rules and skills, of ${m.name}'s ${ctxStr(m.context)} context window. Switching the Rules/Skills tab does not change this.`;
+    }
+
+    // demo blocks are static markup — derive their verdicts from the ago strings
+    function applyDemoVerdicts() {
+      for (const b of canvasEl().querySelectorAll('.block[data-tokens]:not(.cell)')) {
+        const m = /(\d+[mhdw]) ago/.exec(b.querySelector('.tokens')?.textContent || '');
+        if (!m) continue;
+        const usedAt = Date.now() - agoToMs(m[1]);
+        const st = staleness(usedAt, null, 'rule', '');
+        setVerdict(b, st.ring, st.why);
+      }
+    }
+
+    // demo board: sum the static blocks + the treemap state
+    for (const b of canvasEl().querySelectorAll('.block[data-tokens]:not(.cell)')) {
+      contextTokens += parseFloat(b.dataset.tokens) * 1000;
+    }
+    contextTokens += rulesState.reduce((a, r) => a + r.v, 0) * 1000;
+    updateStats();
+    applyDemoVerdicts();
+
+    // ---- Per-tile × button opens the confirm card ----
+    document.addEventListener('click', (e) => {
+      const btn = e.target.closest('.block-trash');
+      if (!btn) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const block = btn.closest('.block');
+      if (!block || block.classList.contains('trashed')) return;
+      askTrash(block);
+    }, true);
+
+    function trashBlock(el) {
+      const tokens = parseFloat(el.dataset.tokens || '0');
+      const info = tipInfo.get(tipNameOf(el)) || {};
+      if (info.path) trashedPaths.add(info.path);
+      contextTokens = Math.max(0, contextTokens - tokens * 1000);
+      updateStats();
+
+      el.style.opacity = '0';
+      if (el.classList.contains('cell')) {
+        const idx = rulesState.findIndex(x => x.name === el.dataset.name);
+        if (idx >= 0) rulesState.splice(idx, 1);
+        cellEls.delete(el.dataset.name);
+        boards[currentKind].rulesState = rulesState;
+        if (lastData) boards[currentKind].key = boardKey(currentKind);
+        setTimeout(() => {
+          el.remove();
+          reflow();
+          render();
+        }, 300);
+      } else {
+        const parent = el.parentElement;
+        el.classList.add('trashed');
+        reflow();
+        setTimeout(() => {
+          el.remove();
+          collapseIfEmpty(parent);
+        }, 500);
+      }
+    }
+
+    function collapseIfEmpty(container) {
+      while (container && (container.classList.contains('col') || container.classList.contains('row'))) {
+        if (container.querySelector('.block')) return;
+        const next = container.parentElement;
+        const dead = container; // capture THIS container — the loop reassigns `container`
+        dead.style.flex = '0.0001';
+        dead.style.minWidth = '0';
+        dead.style.minHeight = '0';
+        setTimeout(() => dead.remove(), 500);
+        container = next;
+      }
+    }
+
+    // ---- Trash confirm card — the consent step before a real ~/.Trash move.
+    // Demo tiles (file://, no live data) skip it and stay visual-only.
+    const veil = document.createElement('div');
+    veil.className = 'confirm-veil';
+    veil.innerHTML = '<div class="confirm-card">'
+      + '<div class="confirm-title"><span>🗑️</span><span class="c-name"></span></div>'
+      + '<div class="confirm-path"></div>'
+      + '<div class="confirm-desc"></div>'
+      + '<div class="confirm-gains">'
+      + '<span class="gain cost"><span class="g-dot"></span><span class="g-cost"></span></span>'
+      + '<span class="gain speed"><span class="g-dot"></span><span class="g-speed"></span></span>'
+      + '</div>'
+      + '<div class="confirm-error"></div>'
+      + '<div class="confirm-actions">'
+      + '<button class="confirm-btn keep">Keep it</button>'
+      + '<button class="confirm-btn trash-it">Move to Trash</button>'
+      + '</div></div>';
+    document.body.appendChild(veil);
+    let pendingTrash = null; // { el, path }
+
+    function closeConfirm() {
+      pendingTrash = null;
+      veil.classList.remove('show');
+    }
+
+    function fillConfirm(el, filePath) {
+      pendingTrash = { el, path: filePath || null };
+      veil.querySelector('.c-name').textContent = tipNameOf(el);
+      veil.querySelector('.confirm-path').textContent = filePath || '';
+      const k = parseFloat(el.dataset.tokens || '0');
+      const toks = k * 1000;
+      const m = currentModel;
+      const saveCents = (toks / 1e6) * m.inPrice * 100;
+      const gain = speedFor(Math.max(0, contextTokens - toks)) - speedFor(contextTokens);
+      veil.querySelector('.confirm-desc').textContent =
+        `Move this file to the macOS Trash? It frees ${fmtTokens(k)} from every prompt. Undo any time from Finder's Trash.`;
+      veil.querySelector('.g-cost').textContent = `save ${dollarsStr(saveCents / 100)}/prompt`;
+      veil.querySelector('.g-speed').textContent = `+${Math.round(Math.max(0, gain))} t/s`;
+      veil.querySelector('.confirm-error').textContent = '';
+      veil.classList.add('show');
+    }
+
+    function askTrash(el) {
+      const info = tipInfo.get(tipNameOf(el)) || {};
+      hideTip();
+      if (!lastData || !info.path) { fillConfirm(el, null); return; } // demo: card only, no disk move
+      fetch('/api/trash', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: info.path }),
+      })
+        .then((r) => r.json())
+        .then((d) => {
+          if (!d.needsConfirm) throw new Error(d.error || 'unexpected reply');
+          fillConfirm(el, d.path);
+        })
+        .catch((err) => {
+          console.error('trash request failed:', err);
+        });
+    }
+
+    veil.querySelector('.trash-it').addEventListener('click', () => {
+      if (!pendingTrash) return;
+      const { el, path: p } = pendingTrash;
+      if (!p) { closeConfirm(); trashBlock(el); return; } // demo board: visual only
+      fetch('/api/trash?confirm=1', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: p }),
+      })
+        .then((r) => r.json())
+        .then((d) => {
+          if (!d.ok) throw new Error(d.error || 'move failed');
+          closeConfirm();
+          trashBlock(el);
+        })
+        .catch((err) => {
+          console.error('trash move failed:', err);
+          veil.querySelector('.confirm-error').textContent = 'Could not move the file: ' + err.message;
+        });
+    });
+    veil.querySelector('.keep').addEventListener('click', closeConfirm);
+    veil.addEventListener('pointerdown', (e) => { if (e.target === veil) closeConfirm(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeConfirm(); });
+
+    // Token-proportional layout: every block, row, and column takes its flex
+    // share from the tokens it holds — so a deletion re-distributes the WHOLE
+    // board by token weight, not just the nearest neighbour.
+    function reflow() {
+      for (const col of canvasEl().querySelectorAll(':scope > .col')) {
+        let colSum = 0;
+        for (const child of col.children) {
+          // flex weights are tokens ×100 — grow factors summing below 1 would
+          // only fill that fraction of the container and leave white gaps
+          if (child.classList.contains('block')) {
+            if (child.classList.contains('trashed')) continue;
+            const t = parseFloat(child.dataset.tokens || '0');
+            colSum += t;
+            child.style.flex = String(Math.max(t * 100, 0.0001));
+          } else if (child.classList.contains('row')) {
+            let rowSum = 0;
+            for (const b of child.children) {
+              if (!b.classList.contains('block') || b.classList.contains('trashed')) continue;
+              const t = parseFloat(b.dataset.tokens || '0');
+              rowSum += t;
+              b.style.flex = String(Math.max(t * 100, 0.0001));
+            }
+            child.style.flex = String(Math.max(rowSum * 100, 0.0001));
+            if (rowSum === 0) child.style.minHeight = '0';
+            colSum += rowSum;
+          } else if (child.classList.contains('treemap')) {
+            const tSum = rulesState.reduce((a, r) => a + r.v, 0);
+            child.style.flex = String(Math.max(tSum * 100, 0.0001));
+            if (tSum === 0) child.style.minHeight = '0';
+            colSum += tSum;
+          }
+        }
+        col.style.flex = String(Math.max(colSum * 100, 0.0001));
+        if (colSum === 0) { col.style.minWidth = '0'; col.style.minHeight = '0'; }
+      }
+    }
+
+    reflow(); // tokens are the source of truth for the layout from the start
+    // keep treemap cells matched to their container while flex animations resize it
+    const ro = new ResizeObserver(() => render());
+    function watchTreemap() {
+      ro.disconnect();
+      const tm = canvasEl().querySelector('.treemap');
+      if (tm) ro.observe(tm);
+    }
+    watchTreemap();
+
+    // ---- Live data ----
+    // When served by server.js, /api/rules returns the real context files on
+    // this machine and the demo board above is rebuilt from them. When that
+    // endpoint isn't there (file://, plain static host), the demo stays.
+    const PALETTE = (document.body.dataset.palette || '').split(',');
+    const TYPE_ICONS = { rule: '📐', command: '🧭', skill: '🎯', agent: '🤖' };
+    const NAME_ICONS = [
+      [/persona|voice|style/i, '🎭'], [/test|e2e|jest/i, '🧪'], [/security/i, '🛡️'],
+      [/review|audit/i, '🔎'], [/claude/i, '📘'], [/agent/i, '🤖'], [/commit|git|repo/i, '🔀'],
+      [/a11y|access/i, '♿'], [/mcp|api|server|sdk/i, '🔌'], [/\bci\b|ci-/i, '⚙️'],
+      [/canvas|design/i, '🎨'], [/shell|cli/i, '💻'], [/hook/i, '🪝'], [/loop|goal/i, '🔁'],
+    ];
+    const iconFor = (r) => (NAME_ICONS.find(([re]) => re.test(r.name)) || [null, TYPE_ICONS[r.type] || '📄'])[1];
+
+    function agoStr(ms) {
+      const s = (Date.now() - ms) / 1000;
+      if (s < 3600) return Math.max(1, Math.round(s / 60)) + 'm';
+      if (s < 86400) return Math.round(s / 3600) + 'h';
+      if (s < 604800) return Math.round(s / 86400) + 'd';
+      return Math.round(s / 604800) + 'w';
+    }
+
+    const fmtTokens = (k) => (k < 0.1 ? `${Math.round(k * 1000)} tokens` : `${k.toFixed(1)}k tokens`);
+
+    // ---- Hover tooltip (custom card — replaces the native title bubbles) ----
+    const tipInfo = new Map(); // display name -> {ico, desc, meta, path}
+    const tip = document.createElement('div');
+    tip.className = 'tip';
+    tip.innerHTML = '<div class="tip-name"><span class="tip-ico"></span><span class="tip-t"></span></div>'
+      + '<div class="tip-desc"></div>'
+      + '<div class="tip-verdict" hidden><span class="tv-dot"></span><span class="tv-t"></span></div>'
+      + '<div class="tip-meta"></div><div class="tip-path"></div>';
+    document.body.appendChild(tip);
+
+    const tipNameOf = (block) => block.dataset.name || block.querySelector('.t, h3')?.textContent || '';
+
+    function fillTip(block) {
+      const name = tipNameOf(block);
+      if (!name) return false;
+      const info = tipInfo.get(name) || {};
+      tip.querySelector('.tip-ico').textContent = info.ico || block.querySelector('.ico')?.textContent || '';
+      tip.querySelector('.tip-t').textContent = name;
+      tip.querySelector('.tip-desc').textContent = info.desc || '';
+      const v = tip.querySelector('.tip-verdict');
+      if (block.dataset.ring) {
+        v.hidden = false;
+        v.className = 'tip-verdict ' + block.dataset.ring[0]; // g / o / r
+        v.querySelector('.tv-t').textContent = block.dataset.why || '';
+      } else {
+        v.hidden = true;
+      }
+      tip.querySelector('.tip-meta').textContent = info.meta || block.querySelector('.tokens')?.textContent || '';
+      tip.querySelector('.tip-path').textContent = info.path || '';
+      return true;
+    }
+
+    function placeTip(x, y) {
+      const w = tip.offsetWidth;
+      const h = tip.offsetHeight;
+      let left = x + 18;
+      let top = y + 18;
+      if (left + w > window.innerWidth - 12) left = x - w - 18;
+      if (top + h > window.innerHeight - 12) top = y - h - 18;
+      tip.style.left = Math.max(12, left) + 'px';
+      tip.style.top = Math.max(12, top) + 'px';
+    }
+
+    let tipBlock = null;
+    function hideTip() {
+      tipBlock = null;
+      tip.classList.remove('show');
+    }
+    document.addEventListener('pointerover', (e) => {
+      const block = e.target.closest('.block');
+      if (!block || block.classList.contains('trashed') || e.target.closest('.block-trash')) {
+        if (e.target.closest('.block-trash')) hideTip();
+        return;
+      }
+      if (fillTip(block)) {
+        tipBlock = block;
+        tip.classList.add('show');
+        placeTip(e.clientX, e.clientY);
+      }
+    });
+    document.addEventListener('pointermove', (e) => {
+      if (!tipBlock) return;
+      placeTip(e.clientX, e.clientY);
+    });
+    document.addEventListener('pointerout', (e) => {
+      if (tipBlock && !e.relatedTarget?.closest?.('.block')) hideTip();
+    });
+    document.addEventListener('pointerdown', hideTip);
+
+    function buildBoard(list, historySince) {
+      usedVerb = 'edited';
+      const sinceStr = historySince
+        ? new Date(historySince).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+        : '';
+      const horizon = sinceStr ? ` · history since ${sinceStr}` : '';
+      const ringHorizon = sinceStr ? ` since ${sinceStr}` : '';
+      if (!list.length) {
+        const canvas = canvasEl();
+        canvas.innerHTML = '';
+        const note = document.createElement('div');
+        note.className = 'empty-note';
+        note.textContent = `No ${currentIde.name} ${currentKind === 'skill' ? 'skills' : 'rules'} found on this machine`;
+        canvas.appendChild(note);
+        cellEls.clear();
+        rulesState = [];
+        boards[currentKind].rulesState = rulesState;
+        boards[currentKind].built = true;
+        syncStatsFromIde(); // cost is rules+skills, even when this tab is empty
+        watchTreemap();
+        return;
+      }
+      const items = list
+        .map((r) => ({
+          ...r,
+          k: r.tokens / 1000,
+          ago: agoStr(r.lastUsed),
+          verb: r.verb || 'edited',
+          editedAgo: agoStr(r.editedAt || r.lastUsed),
+        }))
+        .sort((a, b) => b.k - a.k);
+      // display names stay unique — same-named files get their project prefixed
+      const taken = new Set();
+      for (const it of items) {
+        let n = it.name;
+        if (taken.has(n) && it.project) n = `${it.project}/${it.name}`;
+        while (taken.has(n)) n += '′';
+        taken.add(n);
+        it.disp = n;
+      }
+      for (const it of items) it.st = staleness(it.usedAt, it.editedAt, it.type, ringHorizon);
+
+      // stats are the IDE total (rules + skills) — flipping the kind tab
+      // only changes the board, never the cost / speed / context numbers
+      syncStatsFromIde();
+
+      // don't wipe the other tab's hover cards — Rules and Skills share this Map
+      for (const it of items) {
+        const when = it.verb === 'used'
+          ? `used ${it.ago} ago · edited ${it.editedAgo} ago`
+          : it.type === 'skill'
+            ? `never invoked — only its 1-line description enters sessions${horizon}`
+            : `never used — no mentions in any session${horizon}`;
+        tipInfo.set(it.disp, {
+          ico: iconFor(it),
+          desc: it.summary || '',
+          meta: `${fmtTokens(it.k)} · ${when}${it.attach ? ' · ' + it.attach : ''}`,
+          path: it.path,
+        });
+      }
+
+      // Token-share columns starve when one file dominates (Claude Code's
+      // two AGENTS.md files ate ~85% of the width and shoved the rest off
+      // the canvas). Only keep a labeled column if it would be ≥ MIN_COL px;
+      // fold everything else into the treemap. No extra "meds" row — that
+      // was a fourth starved column. Stats still count every file.
+      const MAX_CELLS = 18;
+      const MIN_COL = 140;
+      const COL_GAP = 13;
+      const canvas = canvasEl();
+      const boardW = Math.max(1, canvas.clientWidth);
+      const ksum = (arr) => arr.reduce((a, it) => a + it.k, 0);
+      const totalK = ksum(items) || 1;
+      const colPx = (sum, nCols) => (sum / totalK) * (boardW - COL_GAP * Math.max(0, nCols - 1));
+
+      let bigs = [];
+      let rest = [];
+      if (items.length <= 2) {
+        bigs = items;
+      } else {
+        const try4 = items.slice(0, 4);
+        const rest4 = items.slice(4);
+        const c1 = ksum(try4.slice(0, 2));
+        const c2 = ksum(try4.slice(2, 4));
+        const c3 = ksum(rest4);
+        if (try4.length === 4 && rest4.length
+            && colPx(c1, 3) >= MIN_COL && colPx(c2, 3) >= MIN_COL && colPx(c3, 3) >= MIN_COL) {
+          bigs = try4;
+          rest = rest4.slice(0, MAX_CELLS);
+        } else if (colPx(ksum(items.slice(0, 2)), 2) >= MIN_COL && colPx(ksum(items.slice(2)), 2) >= MIN_COL) {
+          bigs = items.slice(0, 2);
+          rest = items.slice(2, 2 + MAX_CELLS);
+        } else {
+          rest = items.slice(0, MAX_CELLS);
+        }
+      }
+
+      canvas.innerHTML = '';
+      let ci = 0;
+      const mkBlock = (it, cls) => {
+        const d = document.createElement('div');
+        d.className = 'block ' + cls;
+        d.dataset.tokens = it.k.toFixed(2);
+        d.dataset.name = it.disp;
+        d.style.background = PALETTE[ci++ % PALETTE.length];
+        d.innerHTML = '<button type="button" class="block-trash" aria-label="Remove" title="Remove">×</button><h2><span class="ico"></span><span class="t"></span></h2><div class="tokens"></div>';
+        d.querySelector('.ico').textContent = iconFor(it);
+        d.querySelector('.t').textContent = it.disp;
+        d.querySelector('.tokens').textContent = it.verb === 'used'
+          ? `${fmtTokens(it.k)} · used ${it.ago} ago`
+          : `${fmtTokens(it.k)} · never used`;
+        setVerdict(d, it.st.ring, it.st.why);
+        return d;
+      };
+
+      for (let c = 0; c < 2; c++) {
+        const pair = bigs.slice(c * 2, c * 2 + 2);
+        if (!pair.length) continue;
+        const col = document.createElement('div');
+        col.className = 'col';
+        pair.forEach((it) => col.appendChild(mkBlock(it, 'big')));
+        canvas.appendChild(col);
+      }
+      if (rest.length) {
+        const tm = document.createElement('div');
+        tm.className = 'treemap';
+        const col3 = document.createElement('div');
+        col3.className = 'col';
+        col3.appendChild(tm);
+        canvas.appendChild(col3);
+      }
+
+      cellEls.clear();
+      rulesState = rest.map((it, i) => ({
+        name: it.disp, v: it.k, ago: it.ago, path: it.path, verb: it.verb,
+        ring: it.st.ring, why: it.st.why,
+        color: CELL_COLORS[i % CELL_COLORS.length],
+      }));
+      boards[currentKind].rulesState = rulesState;
+      boards[currentKind].built = true;
+      reflow();
+      render();
+      watchTreemap();
+
+      // screenshot rig: #tip=Name pins the tooltip over that block
+      if (location.hash.startsWith('#tip=')) {
+        const want = decodeURIComponent(location.hash.slice(5));
+        const target = [...document.querySelectorAll('.canvas .block')].find((b) => tipNameOf(b) === want);
+        if (target && fillTip(target)) {
+          const r = target.getBoundingClientRect();
+          tip.classList.add('show');
+          placeTip(r.left + r.width / 2, r.top + r.height / 2);
+        }
+      }
+
+      // screenshot rig: #confirm=Name opens the trash-confirm card for that block
+      // (fade skipped — headless virtual-time shots catch it mid-transition)
+      if (location.hash.startsWith('#confirm=')) {
+        const want = decodeURIComponent(location.hash.slice(9));
+        const target = [...document.querySelectorAll('.canvas .block')].find((b) => tipNameOf(b) === want);
+        if (target) {
+          veil.style.transition = 'none';
+          const info = tipInfo.get(tipNameOf(target)) || {};
+          fillConfirm(target, info.path || null); // sync — don't wait on /api/trash
+        }
+      }
+    }
+
+    // ---- IDE picker dropdown ----
+    // Each IDE maps to the rule sources it actually loads (AGENTS.md is read
+    // by Cursor, Claude Code, Windsurf, and Zed alike).
+    const IDES = [
+      { name: 'Cursor', logo: 'cursor-logo.png', sources: ['cursor', 'agents'], uses: 0 },
+      { name: 'Claude Code', logo: 'claude-logo.png', sources: ['claude', 'agents', 'cosmos'], uses: 0 },
+      { name: 'Windsurf', logo: 'windsurf-logo.png', sources: ['windsurf', 'agents'], uses: 0 },
+      { name: 'GitHub Copilot', logo: 'copilot-logo.png', sources: ['copilot'], uses: 0 },
+      { name: 'Zed', logo: 'zed-logo.png', sources: ['agents'], uses: 0 },
+    ];
+    let currentIde = IDES[0];
+    function sortByUses(list) {
+      list.forEach((x, i) => { x._i = i; });
+      list.sort((a, b) => (b.uses || 0) - (a.uses || 0) || (a._i - b._i));
+      for (const x of list) delete x._i;
+      return list;
+    }
+    let lastData = null; // latest /api/rules payload — refiltered without refetching
+
+    const ideFilter = (rules) => rules.filter((r) => !r.source || currentIde.sources.includes(r.source));
+    const kindFilter = (rules) => currentKind === 'skill'
+      ? rules.filter((r) => r.type === 'skill')
+      : rules.filter((r) => r.type !== 'skill');
+    const trashedPaths = new Set(); // files already moved this session — stay out of the shared total
+
+    function syncStatsFromIde() {
+      if (lastData) {
+        contextTokens = ideFilter(lastData.rules)
+          .filter((r) => !trashedPaths.has(r.path))
+          .reduce((a, r) => a + (r.tokens || 0), 0);
+      }
+      updateStats();
+    }
+
+    const demoHTML = boards.rule.el.innerHTML; // file:// fallback restored when toggling back to Rules
+
+    function boardKey(kind) {
+      const live = lastData
+        ? ideFilter(lastData.rules).filter((r) => !trashedPaths.has(r.path))
+        : [];
+      const names = (kind === 'skill' ? live.filter((r) => r.type === 'skill') : live.filter((r) => r.type !== 'skill'))
+        .map((r) => r.path || r.name).sort().join('|');
+      return (currentIde.name || '') + ':' + kind + ':' + names;
+    }
+
+    function restoreDemo() {
+      activateKind('rule');
+      cellEls.clear();
+      canvasEl().innerHTML = demoHTML;
+      rulesState = RULES.map(([name, v, ago], i) => {
+        const usedAt = Date.now() - (agoToMs(ago) || 0);
+        return { name, v, ago, usedAt, ...staleness(usedAt, null, 'rule', ''), color: CELL_COLORS[i % CELL_COLORS.length] };
+      });
+      boards.rule.rulesState = rulesState;
+      boards.rule.built = true;
+      boards.rule.key = 'demo';
+      contextTokens = 0;
+      for (const b of canvasEl().querySelectorAll('.block[data-tokens]:not(.cell)')) {
+        contextTokens += parseFloat(b.dataset.tokens) * 1000;
+      }
+      contextTokens += rulesState.reduce((a, r) => a + r.v, 0) * 1000;
+      updateStats();
+      applyDemoVerdicts();
+      reflow();
+      render();
+      watchTreemap();
+    }
+
+    function renderBoard(force) {
+      if (lastData) {
+        const live = ideFilter(lastData.rules).filter((r) => !trashedPaths.has(r.path));
+        const key = boardKey(currentKind);
+        if (!force && boards[currentKind].built && boards[currentKind].key === key) {
+          activateKind(currentKind);
+          watchTreemap();
+          return;
+        }
+        boards[currentKind].key = key;
+        buildBoard(kindFilter(live), lastData.historySince);
+        return;
+      }
+      if (currentKind === 'skill') {
+        activateKind('skill');
+        if (!force && boards.skill.built && boards.skill.key === 'demo-empty') {
+          watchTreemap();
+          return;
+        }
+        canvasEl().innerHTML = '';
+        const note = document.createElement('div');
+        note.className = 'empty-note';
+        note.textContent = 'No skills in the demo board';
+        canvasEl().appendChild(note);
+        cellEls.clear();
+        rulesState = [];
+        boards.skill.rulesState = rulesState;
+        boards.skill.built = true;
+        boards.skill.key = 'demo-empty';
+        updateStats(); // keep the demo total — kind tab doesn't change cost
+        watchTreemap();
+        return;
+      }
+      restoreDemo();
+    }
+
+    function selectKind(kind) {
+      activateKind(kind);
+      for (const b of document.querySelectorAll('#kindSwitch button')) {
+        b.setAttribute('aria-selected', String(b.dataset.kind === kind));
+      }
+      renderBoard();
+    }
+    document.getElementById('kindSwitch').addEventListener('click', (e) => {
+      const b = e.target.closest('button[data-kind]');
+      if (b) selectKind(b.dataset.kind);
+    });
+    if (location.hash.startsWith('#kind=')) {
+      const k = decodeURIComponent(location.hash.slice(6));
+      if (k === 'skill' || k === 'rule') selectKind(k);
+    }
+
+    const picker = document.getElementById('idePicker');
+    const ideTrigger = document.getElementById('ideTrigger');
+    const ideMenu = document.getElementById('ideMenu');
+    const ideMenuList = document.getElementById('ideMenuList');
+    function buildIdeMenu() {
+      ideMenuList.innerHTML = '';
+      for (const ide of IDES) {
+        const b = document.createElement('button');
+        b.className = 'ide-option';
+        b.setAttribute('role', 'option');
+        b.setAttribute('aria-selected', String(ide.name === currentIde.name));
+        b.innerHTML = '<img alt=""><span class="labels"><span class="label"></span><span class="sub"></span></span><span class="check">✓</span>';
+        b.querySelector('img').src = ide.logo;
+        b.querySelector('.label').textContent = ide.name;
+        b.querySelector('.sub').textContent = ide.uses ? ide.uses + ' chats' : 'no local chats';
+        b.addEventListener('click', () => selectIde(ide));
+        ideMenuList.appendChild(b);
+      }
+    }
+    buildIdeMenu();
+
+    function setMenu(open) {
+      picker.classList.toggle('open', open);
+      ideTrigger.setAttribute('aria-expanded', String(open));
+      ideMenu.hidden = !open;
+    }
+
+    function selectIde(ide) {
+      currentIde = ide;
+      document.getElementById('ideLogo').src = ide.logo;
+      document.getElementById('ideName').textContent = ide.name;
+      for (const b of ideMenuList.children) {
+        b.setAttribute('aria-selected', String(b.querySelector('.label').textContent === ide.name));
+      }
+      setMenu(false);
+      boards.rule.built = false;
+      boards.skill.built = false;
+      renderBoard();
+    }
+
+    ideTrigger.addEventListener('click', () => setMenu(ideMenu.hidden));
+    document.addEventListener('pointerdown', (e) => {
+      if (!e.target.closest('#idePicker')) setMenu(false);
+      if (!e.target.closest('#modelPicker')) setModelMenu(false);
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { setMenu(false); setModelMenu(false); return; }
+      const menu = !ideMenu.hidden ? ideMenuList : !modelMenu.hidden ? modelMenuList : null;
+      if (!menu || (e.key !== 'ArrowDown' && e.key !== 'ArrowUp')) return;
+      e.preventDefault();
+      const opts = [...menu.children];
+      const i = opts.indexOf(document.activeElement);
+      const next = e.key === 'ArrowDown' ? Math.min(opts.length - 1, i + 1) : Math.max(0, i - 1);
+      opts[i === -1 ? 0 : next].focus();
+    });
+    // screenshot rig: #menu opens the list, #ide=Name pre-selects an IDE
+    if (location.hash === '#menu') setMenu(true);
+    if (location.hash.startsWith('#ide=')) {
+      const wanted = IDES.find((i) => i.name === decodeURIComponent(location.hash.slice(5)));
+      if (wanted) selectIde(wanted);
+    }
+
+    // ---- Model picker dropdown — live OpenRouter pricing per model ----
+    const modelPicker = document.getElementById('modelPicker');
+    const modelTrigger = document.getElementById('modelTrigger');
+    const modelMenu = document.getElementById('modelMenu');
+    const modelMenuList = document.getElementById('modelMenuList');
+
+    function setModelMenu(open) {
+      modelPicker.classList.toggle('open', open);
+      modelTrigger.setAttribute('aria-expanded', String(open));
+      modelMenu.hidden = !open;
+    }
+
+    function buildModelMenu() {
+      modelMenuList.innerHTML = '';
+      for (const m of MODELS) {
+        const b = document.createElement('button');
+        b.className = 'ide-option';
+        b.setAttribute('role', 'option');
+        b.setAttribute('aria-selected', String(m.id === currentModel.id));
+        b.innerHTML = '<img alt=""><span class="labels"><span class="label"></span><span class="sub"></span></span><span class="check">✓</span>';
+        b.querySelector('img').src = m.logo;
+        b.querySelector('.label').textContent = m.name;
+        const useBit = m.uses ? m.uses + ' chats · ' : '';
+        b.querySelector('.sub').textContent = `${useBit}$${m.inPrice} in · $${m.outPrice} out /MTok · ${ctxStr(m.context)} ctx`;
+        b.addEventListener('click', () => selectModel(m));
+        modelMenuList.appendChild(b);
+      }
+    }
+
+    function selectModel(m) {
+      currentModel = m;
+      document.getElementById('modelLogo').src = m.logo;
+      document.getElementById('modelName').textContent = m.name;
+      for (const b of modelMenuList.children) {
+        b.setAttribute('aria-selected', String(b.querySelector('.label').textContent === m.name));
+      }
+      setModelMenu(false);
+      updateStats();
+    }
+
+    modelTrigger.addEventListener('click', () => setModelMenu(modelMenu.hidden));
+    buildModelMenu();
+
+    // live prices: /api/models proxies OpenRouter's public list (1h server cache)
+    (async () => {
+      try {
+        const res = await fetch('/api/models');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        if (data.models && data.models.length) {
+          MODELS = sortByUses(data.models.map((m) => ({ ...m, live: data.live, uses: m.uses || 0 })));
+          currentModel = MODELS.find((m) => m.id === currentModel.id) || MODELS[0];
+          document.getElementById('modelLogo').src = currentModel.logo;
+          document.getElementById('modelName').textContent = currentModel.name;
+          buildModelMenu();
+          if (Array.isArray(data.ides) && data.ides.length) {
+            for (const row of data.ides) {
+              const ide = IDES.find((i) => i.name === row.name);
+              if (ide) ide.uses = row.uses || 0;
+            }
+            sortByUses(IDES);
+            const keep = IDES.find((i) => i.name === currentIde.name) || IDES[0];
+            currentIde = keep;
+            document.getElementById('ideLogo').src = keep.logo;
+            document.getElementById('ideName').textContent = keep.name;
+            buildIdeMenu();
+            renderBoard();
+          }
+          updateStats();
+        }
+      } catch (err) {
+        console.warn('live model prices unavailable — using pinned fallback:', err.message);
+      }
+    })();
+
+    // screenshot rigs: #modelmenu opens the list, #model=Name pre-selects one
+    if (location.hash === '#modelmenu') setModelMenu(true);
+    if (location.hash.startsWith('#model=')) {
+      const wanted = MODELS.find((m) => m.name === decodeURIComponent(location.hash.slice(7)));
+      if (wanted) selectModel(wanted);
+    }
+
+    // Logo stays up 2.6s even when the scan is already done — a beat, not a
+    // wait. The board still loads behind it so the fade lands on live tiles.
+    // Screenshot rigs skip it; #splash pins it.
+    let splashStarted = performance.now();
+    const SPLASH_MIN_MS = 2600;
+    const tBoot = splashStarted;
+    const boot = { panel: 0, api: 0, board: 0 };
+    function bootLog(event) {
+      boot[event] = Math.round(performance.now() - tBoot);
+      console.log('[boot] ' + event + ' ' + boot[event] + 'ms', boot);
+      document.documentElement.dataset.boot = JSON.stringify(boot);
+    }
+    if (location.hash === '#ad') { location.replace('ad.html'); }
+    const skipSplash = location.hash && location.hash !== '#splash'
+      && /^(#menu|#modelmenu|#tip=|#confirm=|#ide=|#model=|#kind=|#ad)/.test(location.hash);
+    const splashEl = document.getElementById('splash');
+    if (skipSplash && splashEl) splashEl.remove();
+    function hideSplash() {
+      if (location.hash === '#splash') return;
+      const s = document.getElementById('splash');
+      if (!s || s.classList.contains('out')) return;
+      const wait = Math.max(0, SPLASH_MIN_MS - (performance.now() - splashStarted));
+      setTimeout(() => {
+        const el = document.getElementById('splash');
+        if (!el || el.classList.contains('out')) return;
+        el.classList.add('out');
+        bootLog('panel');
+        setTimeout(() => el.remove(), 500);
+      }, wait);
+    }
+    if (skipSplash) bootLog('panel');
+
+    let lastPayload = null;
+    async function refresh(fresh) {
+      const res = await fetch('/api/rules' + (fresh ? '?fresh=1' : ''));
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const text = await res.text();
+      const data = JSON.parse(text);
+      if (data.rules && data.rules.length && text !== lastPayload) {
+        lastPayload = text;
+        lastData = data;
+        renderBoard();
+        if (!boot.board) bootLog('board');
+      }
+      return data;
+    }
+    (async () => {
+      try {
+        const tApi = performance.now();
+        let data = await refresh(); // cache-first — board loads behind the logo
+        boot.api = Math.round(performance.now() - tApi);
+        bootLog('api');
+        hideSplash();
+        for (let i = 0; i < 40 && !(data.usageReady && (data.vscdb === 'ready' || data.vscdb === 'unavailable')); i++) {
+          await new Promise((r) => setTimeout(r, 400));
+          data = await refresh();
+        }
+      } catch (err) {
+        console.warn('live rules unavailable — showing demo data:', err.message);
+        hideSplash();
+      }
+    })();
+  </script>
+</body>
+</html>

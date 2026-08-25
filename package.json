@@ -1,0 +1,74 @@
+{
+  "name": "contexy",
+  "productName": "Contexy",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Contexy — local context-file treemap",
+  "main": "electron.js",
+  "scripts": {
+    "start": "electron .",
+    "server": "node server.js",
+    "dist": "electron-builder --mac dmg zip dir --arm64"
+  },
+  "build": {
+    "appId": "app.contexy.desktop",
+    "productName": "Contexy",
+    "copyright": "Contexy",
+    "asar": true,
+    "files": [
+      "electron.js",
+      "server.js",
+      "index.html",
+      "ad.html",
+      "logo.html",
+      "*-logo.png",
+      "*-logo.svg",
+      "openai-logo.svg",
+      "gemini-logo.svg",
+      "x-ai-logo.png",
+      "deepseek-logo.png",
+      "click.wav"
+    ],
+    "mac": {
+      "icon": "build/icon.icns",
+      "category": "public.app-category.developer-tools",
+      "target": [
+        {
+          "target": "dir",
+          "arch": [
+            "arm64"
+          ]
+        },
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "identity": null,
+      "gatekeeperAssess": false
+    },
+    "dmg": {
+      "title": "Contexy",
+      "contents": [
+        { "x": 140, "y": 180, "type": "file" },
+        { "x": 410, "y": 180, "type": "link", "path": "/Applications" }
+      ]
+    },
+    "afterPack": "scripts/afterPack.js",
+    "directories": {
+      "output": "dist"
+    }
+  },
+  "devDependencies": {
+    "electron": "^44.0.0",
+    "electron-builder": "^26.15.3"
+  }
+}

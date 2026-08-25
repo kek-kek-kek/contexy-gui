@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  html, body { margin: 0; width: 1024px; height: 1024px; background: #fff; }
+  body { display: flex; align-items: center; justify-content: center; }
+  .logo-blocks {
+    display: grid;
+    grid-template-columns: 444px 241px;
+    grid-template-rows: 270px 280px;
+    gap: 48px 58px;
+  }
+  .logo-block {
+    border-radius: 87px;
+    box-shadow: 0 28px 64px rgba(15, 20, 35, 0.18), 0 8px 20px rgba(15, 20, 35, 0.08);
+  }
+  .lb-red { grid-column: 1 / -1; background: #f80404; }
+  .lb-blue { background: #3d6ef2; }
+  .lb-yellow { background: #ffe602; }
+</style>
+</head>
+<body>
+  <div class="logo-blocks">
+    <div class="logo-block lb-red"></div>
+    <div class="logo-block lb-blue"></div>
+    <div class="logo-block lb-yellow"></div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,10 @@
+node_modules/
+dist/
+*.webm
+.DS_Store
+Contexy.dmg
+Contexy.zip
+*.blockmap
+shot-*.png
+preview.png
+build/icon.iconset/
