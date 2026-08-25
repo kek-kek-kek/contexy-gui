@@ -493,14 +493,32 @@
   /* Medium labeled blocks — extra right pad so the trash button doesn't cover the name */
   .block.med { padding: 20px 48px 20px 22px; }
   .block.med h2 { font-family: "SF Mono", ui-monospace, Menlo, monospace; font-size: 18px; gap: 10px; }
-  .block.med h2 .ico { font-size: 21px; }
+  .block.med h2 .ico { display: none; font-size: 21px; }
   .block.med .tokens { font-size: 16px; margin-top: 5px; }
 
   /* The giant standouts */
   .block.big { padding: 28px 52px 28px 32px; }
   .block.big h2 { font-family: "SF Mono", ui-monospace, Menlo, monospace; font-size: 28px; font-weight: 800; gap: 14px; }
-  .block.big h2 .ico { font-size: 34px; }
+  .block.big h2 .ico { display: none; font-size: 34px; }
   .block.big .tokens { font-size: 18px; margin-top: 8px; }
+
+  /* dead weight only — red bang, no decorative emoji */
+  .block.big[data-ring="red"] h2 .ico,
+  .block.med[data-ring="red"] h2 .ico {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.05em;
+    height: 1.05em;
+    border-radius: 8px;
+    background: var(--red);
+    color: #fff;
+    font-family: inherit;
+    font-weight: 800;
+    font-size: 0.72em;
+    line-height: 1;
+    flex-shrink: 0;
+  }
 
   /* Squarified treemap of the remaining rule files */
   .treemap {
@@ -513,19 +531,16 @@
   /* text steps down (instead of clipping) as its block narrows */
   @container (max-width: 440px) {
     .block.big h2 { font-size: 22px; }
-    .block.big h2 .ico { font-size: 26px; }
     .block.big .tokens { font-size: 15px; }
   }
 
   @container (max-width: 340px) {
     .block.big h2 { font-size: 18px; }
-    .block.big h2 .ico { font-size: 21px; }
     .block.big .tokens { font-size: 13px; }
   }
 
   @container (max-width: 230px) {
     .block.med h2 { font-size: 15px; }
-    .block.med h2 .ico { font-size: 18px; }
     .block.med .tokens { font-size: 13px; }
   }
 
@@ -788,12 +803,12 @@
     <div class="col" style="flex: 40">
       <div class="block big" data-tokens="2.4" style="flex: 54; background: #3b82f6">
         <button type="button" class="block-trash" aria-label="Remove" title="Remove">×</button>
-        <h2><span class="ico">🧩</span><span class="t">server-components.md</span></h2>
+        <h2><span class="ico">!</span><span class="t">server-components.md</span></h2>
         <div class="tokens">2.4k tokens · used 5m ago</div>
       </div>
       <div class="block big" data-tokens="2.0" style="flex: 46; background: #f59e0b">
         <button type="button" class="block-trash" aria-label="Remove" title="Remove">×</button>
-        <h2><span class="ico">🚨</span><span class="t">error-boundaries.md</span></h2>
+        <h2><span class="ico">!</span><span class="t">error-boundaries.md</span></h2>
         <div class="tokens">2.0k tokens · used 32m ago</div>
       </div>
     </div>
@@ -801,12 +816,12 @@
     <div class="col" style="flex: 26">
       <div class="block big" data-tokens="1.6" style="flex: 56; background: #8b5cf6">
         <button type="button" class="block-trash" aria-label="Remove" title="Remove">×</button>
-        <h2><span class="ico">🎨</span><span class="t">shadcn-ui.md</span></h2>
+        <h2><span class="ico">!</span><span class="t">shadcn-ui.md</span></h2>
         <div class="tokens">1.6k tokens · used 2w ago</div>
       </div>
       <div class="block big" data-tokens="1.3" style="flex: 44; background: #f97316">
         <button type="button" class="block-trash" aria-label="Remove" title="Remove">×</button>
-        <h2><span class="ico">🚫</span><span class="t">no-any.md</span></h2>
+        <h2><span class="ico">!</span><span class="t">no-any.md</span></h2>
         <div class="tokens">1.3k tokens · used 3h ago</div>
       </div>
     </div>
@@ -815,12 +830,12 @@
       <div class="row" style="flex: 26">
         <div class="block med" data-tokens="0.51" style="flex: 53; background: #e11d48">
           <button type="button" class="block-trash" aria-label="Remove" title="Remove">×</button>
-          <h2><span class="ico">🛡️</span><span class="t">zod.md</span></h2>
+          <h2><span class="ico">!</span><span class="t">zod.md</span></h2>
           <div class="tokens">0.5k · 3w ago</div>
         </div>
         <div class="block med" data-tokens="0.45" style="flex: 47; background: #14b8a6">
           <button type="button" class="block-trash" aria-label="Remove" title="Remove">×</button>
-          <h2><span class="ico">📝</span><span class="t">markdown.md</span></h2>
+          <h2><span class="ico">!</span><span class="t">markdown.md</span></h2>
           <div class="tokens">0.5k · 12m ago</div>
         </div>
       </div>
@@ -1574,8 +1589,7 @@
         d.dataset.tokens = it.k.toFixed(2);
         d.dataset.name = it.disp;
         d.style.background = PALETTE[ci++ % PALETTE.length];
-        d.innerHTML = '<button type="button" class="block-trash" aria-label="Remove" title="Remove">×</button><h2><span class="ico"></span><span class="t"></span></h2><div class="tokens"></div>';
-        d.querySelector('.ico').textContent = iconFor(it);
+        d.innerHTML = '<button type="button" class="block-trash" aria-label="Remove" title="Remove">×</button><h2><span class="ico">!</span><span class="t"></span></h2><div class="tokens"></div>';
         d.querySelector('.t').textContent = it.disp;
         d.querySelector('.tokens').textContent = it.verb === 'used'
           ? `${fmtTokens(it.k)} · used ${it.ago} ago`
